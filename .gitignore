@@ -5,7 +5,9 @@ node_modules/
 dist/
 
 # Environment variables
-#.env
+.env
+.env.local
+.env.*.local
 
 # Logs
 logs
@@ -21,3 +23,7 @@ npm-debug.log*
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+# Azure deployment artifacts
+.deployment
+.azure

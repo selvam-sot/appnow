@@ -1,0 +1,88 @@
+name: Deploy to Azure Web App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Create a clean deployment package
+      - name: Prepare deployment package
+        run: |
+          mkdir -p deployment
+          cp -r dist package.json package-lock.json .deployment web.config deployment/
+          
+          # Add startup command file to ensure proper startup
+          echo 'node ./dist/server.js' > deployment/startup.txt
+          
+          # Create the deployment zip
+          cd deployment
+          zip -r ../deployment.zip .
+          cd ..
+          ls -la deployment.zip
+
+      # Add a delay before deployment to avoid SCM container restart issues
+      - name: Wait before deployment
+        run: |
+          echo "Waiting 30 seconds before deployment to avoid SCM container restart issues..."
+          sleep 30
+
+      # Stop the web app to ensure clean deployment
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          
+      - name: Stop Web App
+        run: |
+          echo "Stopping Web App before deployment..."
+          az webapp stop --name testnode123 --resource-group YourResourceGroupName
+          echo "Waiting 15 seconds after stopping web app..."
+          sleep 15
+        continue-on-error: true
+
+      # Deploy to Azure
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'testnode123'
+          slot-name: 'Production'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: './deployment.zip'
+          respect-pom-xml: false
+
+      # Start the web app after deployment
+      - name: Start Web App
+        run: |
+          echo "Starting Web App after deployment..."
+          az webapp start --name testnode123 --resource-group YourResourceGroupName
+        continue-on-error: true
+
+      # Verify deployment
+      - name: Verify deployment
+        run: |
+          echo "Waiting for app to start..."
+          sleep 30
+          echo "Checking if app is responding..."
+          curl -s -o /dev/null -w "%{http_code}" https://testnode123-bxbmfphzcaafagct.centralus-01.azurewebsites.net/
+        continue-on-error: true
