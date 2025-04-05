@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Category from '../models/Category';
+import Category from '../models/category.model';
 
 /**
  * Get all categories
@@ -231,6 +231,30 @@ export const toggleActive = async (req: Request, res: Response): Promise<void> =
     res.status(200).json({
       success: true,
       data: category,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
+    });
+  }
+};
+
+// General functions
+export const getCategoryList = async (req: Request, res: Response) => {
+  try {    
+    // Build filter object
+    const filter: Record<string, any> = {
+      isActive: true
+    };
+
+    const categories = await Category.find(filter).sort({ categoryName: 1 });
+    
+    res.status(200).json({
+      success: true,
+      count: categories.length,
+      data: categories,
     });
   } catch (error) {
     res.status(500).json({

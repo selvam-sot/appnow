@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { connectToDatabase } from './config/database';
-import categoryRoutes from './routes/categoryRoutes';
 import winston from 'winston';
 
 // Configure logger
@@ -38,14 +37,22 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 // Routes
 app.get('/', (_req: Request, res: Response) => {
   res.json({ 
-    message: 'Welcome to Category Management API',
+    message: 'Welcome to Appointment Management System',
     status: 'Server is running',
     version: '1.0.0'
   });
 });
 
 // API routes
-app.use('/api/categories', categoryRoutes);
+try {
+  const adminRoutes = require('./routes/admin').default;  
+  const userRoutes = require('./routes/user').default;  
+  app.use('/api/v1/admin', adminRoutes);
+  app.use('/api/v1/user', userRoutes);
+  logger.info('Routes loaded successfully');
+} catch (error) {
+  logger.error('Error loading routes:', error);
+}
 
 // Error handling middleware
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

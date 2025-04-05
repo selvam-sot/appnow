@@ -35,6 +35,8 @@ export const connectToDatabase = async (): Promise<void> => {
 
     // Log that we're attempting to connect (useful for debugging)
     logger.info(`Attempting to connect to Azure Cosmos DB: ${process.env.COSMOS_DB_NAME}`);
+
+    mongoose.set('strictQuery', false);
     
     await mongoose.connect(process.env.COSMOS_DB_CONNECTION_STRING, options);
     
