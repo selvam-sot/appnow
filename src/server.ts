@@ -43,6 +43,14 @@ app.get('/', (_req: Request, res: Response) => {
   });
 });
 
+app.get('/health', (_req: Request, res: Response) => {
+  res.json({ 
+    message: 'Application running in health condition',
+    status: 'Server is running',
+    version: '1.0.0'
+  });
+});
+
 // API routes
 try {
   const adminRoutes = require('./routes/admin').default;  
