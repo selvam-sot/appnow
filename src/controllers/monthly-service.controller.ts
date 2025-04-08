@@ -23,7 +23,7 @@ export const createMonthlyService = async (req: Request, res: Response) => {
 
 export const getMonthlyServices = async (req: Request, res: Response) => {
     try {
-        const monthlyServices = await MonthlyService.find().sort({name: 1});
+        const monthlyServices = await MonthlyService.find().sort();
         res.json(monthlyServices);
     } catch (error: any) {
         logger.error(`Error in fetching monthlyServices: ${error.message}`);
