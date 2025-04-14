@@ -156,3 +156,37 @@ export const deleteUserAccount = asyncHandler(async (req: Request, res: Response
     });
     res.json({ message: 'User account deleted successfully' });
 });
+
+// export const getRoles = async (req: Request, res: Response) => {
+//     try {    
+//         const roles = await Role.find().sort();
+        
+//         res.status(200).json({
+//         success: true,
+//         count: roles.length,
+//         data: roles,
+//         });
+//     } catch (error) {
+//         res.status(500).json({
+//         success: false,
+//         error: 'Server Error',
+//         message: error instanceof Error ? error.message : 'Unknown error occurred',
+//         });
+//     }
+// };
+
+export const getUsers = async (req: Request, res: Response) => {
+    try {    
+        res.status(200).json({
+            success: true,
+            count: 0,
+            data: [],
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+    }
+};

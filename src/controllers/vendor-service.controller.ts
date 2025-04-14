@@ -55,6 +55,6 @@ export const getVendorServiceList = asyncHandler(async (req: Request, res: Respo
         req.body = {...req.body, ...{ isActive: true }};
     }
     console.log(req.body);
-    const vendorServices = await VendorService.find(req.body).sort({serviceName: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
+    const vendorServices = await VendorService.find({ isActive: true }).sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
     res.json(vendorServices);
 });

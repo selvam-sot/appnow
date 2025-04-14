@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-//import userRoutes from './user.routes';
+import userRoutes from './user.routes';
 import categoryRoutes from './category.routes';
 import subCategoryRoutes from './sub-category.routes';
 import vendorRoutes from './vendor.routes';
@@ -21,6 +21,6 @@ router.use('/appointments', appointmentRoutes);
 router.use('/manage-appointments', manageAppointmentRoutes);
 router.use('/monthly-service', monthlyServiceRoutes);
 
-// router.use('/users', userRoutes);
+router.use('/users', userRoutes);
 
 export default router;
