@@ -56,7 +56,7 @@ try {
   const adminRoutes = require('./routes/admin').default;  
   const userRoutes = require('./routes/user').default;  
   app.use('/api/v1/admin', adminRoutes);
-  app.use('/api/v1/user', userRoutes);
+  //app.use('/api/v1/user', userRoutes);
   logger.info('Routes loaded successfully');
 } catch (error) {
   logger.error('Error loading routes:', error);
