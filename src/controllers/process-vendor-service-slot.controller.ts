@@ -1,10 +1,7 @@
 import { Request, Response } from 'express';
-import { validationResult } from 'express-validator';
 import moment from 'moment';
 
-import VendorService from './../models/vendor-service.model';
 import VendorServiceSlot from './../models/vendor-service-slot.model';
-import { AppError } from './../utils/appError.util';
 import { asyncHandler } from './../utils/asyncHandler.util';
 import { getServiceSlots } from './../services/get-slots.service';
 import { Slot } from './../interfaces/common.interface';

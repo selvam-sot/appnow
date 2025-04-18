@@ -3,10 +3,8 @@ import mongoose from 'mongoose';
 import moment from 'moment';
 
 import VendorService from '../models/vendor-service.model';
-import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
-import { Slot } from '@/interfaces/common.interface';
-import { getServiceSlots } from '@/services/get-slots.service';
+import { getServiceSlots } from './../services/get-slots.service';
 
 interface TimeSlot {
     start_time: string;
