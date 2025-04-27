@@ -49,12 +49,26 @@ export const deleteVendorService = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getVendorServiceList = asyncHandler(async (req: Request, res: Response) => {
-    if ('_ids' in req.body) {
-        req.body = { '_id': { $in: req.body._ids } };
-    } else {
-        req.body = {...req.body, ...{ isActive: true }};
+    try {
+        if ('_ids' in req.body) {
+            req.body = { '_id': { $in: req.body._ids } };
+        } else {
+            req.body = {...req.body, ...{ isActive: true }};
+        }
+        const filter: Record<string, any> = {...req.body, isActive: true};
+
+        const vendorServices = await VendorService.find(filter).sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
+        
+        res.status(200).json({
+            success: true,
+            count: vendorServices.length,
+            data: vendorServices,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
     }
-    console.log(req.body);
-    const vendorServices = await VendorService.find({ isActive: true }).sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
-    res.json(vendorServices);
 });

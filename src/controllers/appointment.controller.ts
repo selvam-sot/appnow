@@ -112,13 +112,20 @@ export const appointmentOperations = async (req: Request, res: Response) => {
         if (req.body.type == 'create-booking') {
             delete req.body.type;
             const appointment = await Appointment.create(req.body);
-            res.status(201).json(appointment);
+            res.status(201).json({
+                success: true,
+                data: appointment,
+            });
         } else if (req.body.type == 'update-booking') {
             // update booking
         } else {
             delete req.body.type;
             const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
-            res.json(appointments);
+            res.status(200).json({
+                success: true,
+                count: appointments.length,
+                data: appointments,
+            });
         }
     } catch (error: any) {
         logger.error(`Error in fetching categories: ${error.message}`);

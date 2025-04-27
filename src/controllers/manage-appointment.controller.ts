@@ -55,11 +55,18 @@ export const getServiceSlots = asyncHandler(async (req: Request, res: Response) 
                 }
             }
         ]);
+        res.status(200).json({
+            success: true,
+            data: result,
+        });
 
         res.json(result);
     } catch (error: any) {
-        res.json([]);
-        throw new Error(`Error fetching vendor service slots: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
     }
     
 });

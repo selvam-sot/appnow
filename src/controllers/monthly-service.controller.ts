@@ -91,8 +91,15 @@ export const getMonthlyServiceList = async (req: Request, res: Response) => {
         req.body = {...req.body, ...{ isActive: true }};
         const monthlyServices = await MonthlyService.find(req.body);
         res.json(monthlyServices);
-    } catch (error: any) {
-        logger.error(`Error in fetching monthlyServices: ${error.message}`);
-        res.status(500).json({ message: 'Server error' });
+        res.status(200).json({
+            success: true,
+            data: monthlyServices,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
     }
 };

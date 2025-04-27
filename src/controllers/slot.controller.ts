@@ -153,10 +153,15 @@ export const getServiceSlotsByDate = asyncHandler(async (req: Request, res: Resp
             })
         }
         serviceSlotsByDate = groupTimeSlots(serviceSlotsByDate);
-        console.log("Slots: ", serviceSlotsByDate);
-        res.json(serviceSlotsByDate);
+        res.status(200).json({
+            success: true,
+            data: serviceSlotsByDate,
+        });
     } catch (error: any) {
-        res.json([]);
-        throw new Error(`Error fetching vendor service slots: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
     }
 });

@@ -49,12 +49,25 @@ export const deleteService = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getServiceList = asyncHandler(async (req: Request, res: Response) => {
-    if ('name' in req.body) {
-        //req.body.name = new RegExp(`^${req.body.name.toLowerCase()}$`, 'i');
-        req.body.name = new RegExp(req.body.name.toLowerCase(), 'i');
+    try {
+        if ('name' in req.body) {
+            //req.body.name = new RegExp(`^${req.body.name.toLowerCase()}$`, 'i');
+            req.body.name = new RegExp(req.body.name.toLowerCase(), 'i');
+        }
+        //req.body = {...req.body, ...{ isActive: true }};
+        const services = await Service.find(req.body).sort({name: 1});
+        console.log("Service req body:", req.body, services.length);
+        
+        res.status(200).json({
+            success: true,
+            count: services.length,
+            data: services,
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
     }
-    //req.body = {...req.body, ...{ isActive: true }};
-    const services = await Service.find(req.body).sort({name: 1});
-    console.log("Service req body:", req.body, services.length);
-    res.json(services);
 });
