@@ -161,7 +161,7 @@ export const getSubCategoryList = async (req: Request, res: Response) => {
         // Build filter object
         const filter: Record<string, any> = {...req.body, isActive: true};
 
-        const subCategories:any = await SubCategory.find(filter).sort({ subCategoryName: 1 }).populate('categoryId');
+        const subCategories:any = await SubCategory.find(filter).sort({ name: 1 }).populate('categoryId');
         
         res.status(200).json({
             success: true,

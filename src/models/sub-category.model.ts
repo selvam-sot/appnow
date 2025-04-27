@@ -37,4 +37,8 @@ const SubCategorySchema: Schema = new Schema({
     versionKey: '__v' // This matches the field in your DB output
 });
 
+SubCategorySchema.index({ name: 1 });
+SubCategorySchema.index({ isActive: 1 });
+SubCategorySchema.index({ isFavorite: 1 });
+
 export default mongoose.model<ISubCategory & Document>('SubCategory', SubCategorySchema);

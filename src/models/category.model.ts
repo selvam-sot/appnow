@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import { ICategory } from '../interfaces/category.interface';
 
 const CategorySchema: Schema = new Schema({
-    categoryName: { 
+    name: { 
         type: String, 
         required: true,
         unique: true 
@@ -33,7 +33,7 @@ const CategorySchema: Schema = new Schema({
 });
 
 // Create indexes (optimizes queries)
-CategorySchema.index({ categoryName: 1 });
+CategorySchema.index({ name: 1 });
 CategorySchema.index({ isActive: 1 });
 CategorySchema.index({ isFavorite: 1 });
 

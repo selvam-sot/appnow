@@ -249,7 +249,7 @@ export const getCategoryList = async (req: Request, res: Response) => {
       isActive: true
     };
 
-    const categories = await Category.find(filter).sort({ categoryName: 1 });
+    const categories = await Category.find(filter).sort({ name: 1 });
     
     res.status(200).json({
       success: true,

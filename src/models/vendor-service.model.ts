@@ -121,4 +121,6 @@ const VendorServiceSchema: Schema = new Schema({
     versionKey: '__v' // This matches the field in your DB output
 });
 
+VendorServiceSchema.index({ name: 1 });
+
 export default mongoose.model<IVendorService & Document>('VendorService', VendorServiceSchema, 'vendor-services');

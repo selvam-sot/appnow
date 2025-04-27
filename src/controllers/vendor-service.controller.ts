@@ -56,7 +56,7 @@ export const getVendorServiceList = asyncHandler(async (req: Request, res: Respo
             req.body = {...req.body, ...{ isActive: true }};
         }
         const filter: Record<string, any> = {...req.body, isActive: true};
-
+        console.log(filter);
         const vendorServices = await VendorService.find(filter).sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
         
         res.status(200).json({
