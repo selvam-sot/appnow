@@ -59,22 +59,29 @@ export const verifyToken = (token: string): JwtPayload => {
 
 // Function to set JWT in cookie
 export const setTokenCookie = (res: Response, token: string): void => {
-    const cookieOptions = {
-        expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict' as const
-    };
-
-    res.cookie('jwt', token, cookieOptions);
+    try {
+        // Using maxAge instead of expires to avoid formatting issues
+        const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+        
+        res.cookie('jwt', token, {
+            maxAge,
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict' as const
+        });
+    } catch (error) {
+        console.error('Error setting cookie:', error);
+        // Continue execution even if cookie setting fails
+    }
 };
 
 // Function to clear JWT cookie
 export const clearTokenCookie = (res: Response): void => {
-    res.cookie('jwt', 'none', {
-        expires: new Date(Date.now() + 5 * 1000), // 5 seconds
-        httpOnly: true
-    });
+    try {
+        res.clearCookie('jwt');
+    } catch (error) {
+        console.error('Error clearing cookie:', error);
+    }
 };
 
 // Function to get JWT from request
@@ -84,7 +91,7 @@ export const getTokenFromRequest = (req: Request): string | null => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         // Get token from Bearer token in header
         token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies.jwt) {
+    } else if (req.cookies && req.cookies.jwt) {
         // Get token from cookie
         token = req.cookies.jwt;
     }

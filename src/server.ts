@@ -26,7 +26,18 @@ connectToDatabase();
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+
+const corsOptions = {
+  origin: [
+    'http://localhost:8081',
+    'http://192.168.0.88:8081',
+    'exp://192.168.0.88:8081',
+    // Add any other origins you need
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+app.use(cors(corsOptions));
 
 // Request logging middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {

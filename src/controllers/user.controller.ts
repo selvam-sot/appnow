@@ -3,10 +3,9 @@ import { validationResult } from 'express-validator';
 import User from '../models/user.model';
 import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendActivationEmail } from '../services/email.service';
-import { signToken, verifyToken } from '../utils/jwt.util';
+import { signToken, verifyToken, setTokenCookie } from '../utils/jwt.util';
 
 export const signupUser = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -58,19 +57,19 @@ export const activateUser = asyncHandler(async (req: Request, res: Response) => 
 
 export const loginUser = asyncHandler(async (req: Request, res: Response) => {
     const { userName, password } = req.body;
+    console.log('login inside0', req.body);
     const user = await User.findOne({ userName }).select('+password');
 
     if (!user || !(await user.correctPassword(password, user.password))) {
         return new AppError('Incorrect email or password', 401);
     }
 
+    console.log('login inside1');
     const token = signToken(user._id, user.role, user.tokenVersion);
+    console.log('login inside2', token);
 
-    res.cookie('jwt', token, {
-        expires: new Date(Date.now() + parseInt(process.env.JWT_COOKIE_EXPIRES_IN!) * 24 * 60 * 60 * 1000),
-        httpOnly: true,
-        secure: req.secure || req.headers['x-forwarded-proto'] === 'https'
-    });
+    // Use the utility function instead of directly setting the cookie
+    setTokenCookie(res, token);
 
     user.password = '';
 
@@ -97,10 +96,8 @@ export const logoutUser = asyncHandler(async (req: Request, res: Response) => {
     // Now we can call the method on the actual user document
     await user.incrementTokenVersion();
 
-    res.cookie('jwt', 'loggedout', {
-        expires: new Date(Date.now() + 10 * 1000),
-        httpOnly: true
-    });
+    // Use cookie options that align with our JWT utility
+    res.clearCookie('jwt');
 
     res.status(200).json({ status: 'success', message: 'Logged out successfully' });
 });
@@ -150,37 +147,17 @@ export const deleteUserAccount = asyncHandler(async (req: Request, res: Response
     }
 
     //await user.remove();
-    res.cookie('jwt', '', {
-        httpOnly: true,
-        expires: new Date(0)
-    });
+    res.clearCookie('jwt');
     res.json({ message: 'User account deleted successfully' });
 });
 
-// export const getRoles = async (req: Request, res: Response) => {
-//     try {    
-//         const roles = await Role.find().sort();
-        
-//         res.status(200).json({
-//         success: true,
-//         count: roles.length,
-//         data: roles,
-//         });
-//     } catch (error) {
-//         res.status(500).json({
-//         success: false,
-//         error: 'Server Error',
-//         message: error instanceof Error ? error.message : 'Unknown error occurred',
-//         });
-//     }
-// };
-
 export const getUsers = async (req: Request, res: Response) => {
-    try {    
+    try {
+        const users = await User.find({}).sort({ firstName: 1 });
         res.status(200).json({
             success: true,
             count: 0,
-            data: [],
+            data: users,
         });
     } catch (error) {
         res.status(500).json({

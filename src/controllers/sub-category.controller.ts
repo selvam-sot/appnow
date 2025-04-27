@@ -159,11 +159,9 @@ export const deleteSubCategory = async (req: Request, res: Response): Promise<vo
 export const getSubCategoryList = async (req: Request, res: Response) => {
     try {
         // Build filter object
-        const filter: Record<string, any> = {
-            isActive: true
-        };
+        const filter: Record<string, any> = {...req.body, isActive: true};
 
-        const subCategories = await SubCategory.find(filter).sort({ subCategoryName: 1 }).populate('categoryId');
+        const subCategories:any = await SubCategory.find(filter).sort({ subCategoryName: 1 }).populate('categoryId');
         
         res.status(200).json({
             success: true,
