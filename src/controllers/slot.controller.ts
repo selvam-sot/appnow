@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import moment from 'moment';
 
 import VendorService from '../models/vendor-service.model';
+import VendorServiceSlot from '../models/vendor-service-slot.model';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import { getServiceSlots } from './../services/get-slots.service';
 
@@ -58,100 +59,58 @@ const groupTimeSlots = (timeSlots: TimeSlot[][]): GroupedTimeSlot[] => {
 export const getServiceSlotsByDate = asyncHandler(async (req: Request, res: Response) => {
     const dt = moment(req.body.date).format('YYYY-MM-DD');
     try {
-        const results = await VendorService.aggregate([
-            // Get all vendor services for the service ID
-            {
-                $match: {
-                    serviceId: new mongoose.Types.ObjectId(req.body.serviceId)
-                }
-            },
-            // Lookup slots with date matching
-            {
-                $lookup: {
-                    from: 'vendorserviceslots',
-                    let: { 
-                        vendorServiceId: '$_id',
-                        duration: '$duration'
-                    },
-                    pipeline: [
-                        {
-                            $match: {
-                                $expr: {
-                                    $and: [
-                                        { $eq: ['$vendorServiceId', '$$vendorServiceId'] },
-                                        // Ensure dates array exists
-                                        { $isArray: '$dates' }
-                                    ]
-                                }
-                            }
-                        },
-                        // Unwind dates array to match specific date
-                        {
-                            $unwind: '$dates'
-                        },
-                        // Match the specific date
-                        {
-                            $match: {
-                                'dates.date': new Date(dt)
-                            }
-                        },
-                        // Add duration to the slot
-                        {
-                            $addFields: {
-                                duration: '$$duration'
-                            }
-                        },
-                        // Group back to reconstruct the dates array
-                        {
-                            $group: {
-                                _id: '$_id',
-                                vendorServiceId: { $first: '$vendorServiceId' },
-                                month: { $first: '$month' },
-                                year: { $first: '$year' },
-                                reoccurrence: { $first: '$reoccurrence' },
-                                duration: { $first: '$duration' },
-                                dates: { $push: '$dates' },
-                                createdAt: { $first: '$createdAt' },
-                                updatedAt: { $first: '$updatedAt' }
-                            }
-                        }
-                    ],
-                    as: 'slots'
-                }
-            },
-            // Project needed fields
-            {
-                $project: {
-                    _id: 1,
-                    vendorServiceId: '$_id',
-                    serviceId: 1,
-                    slots: 1
-                }
-            }
-        ]);
-
+        // Step 1: Get all vendor services for the service ID
+        const vendorServices = await VendorService.find({
+            serviceId: new mongoose.Types.ObjectId(req.body.serviceId)
+        });
+        
         let serviceSlotsByDate: any = [];
         const appointments: any = [];
-
-        if (results.length > 0) {
-            results.forEach((result: any) => {
-                if (result.slots.length > 0) {
-                    result.slots.forEach((slot: any) => {
-                        if (slot.dates.length > 0) {
-                            slot.dates.forEach((slotDate: any) => {
-                                const slots = getServiceSlots(
-                                    slotDate,
-                                    slot.duration,
-                                    appointments,
-                                    slot.vendorServiceId
-                                );
-                                serviceSlotsByDate.push(slots);
-                            });
-                        }
-                    })
+        
+        // Step 2: Process each vendor service
+        for (const vendorService of vendorServices) {
+            // Step 3: For each vendor service, find matching slots
+            // This replaces the $lookup with let
+            const slots = await VendorServiceSlot.aggregate([
+                // Match slots for this vendor service
+                {
+                    $match: {
+                        vendorServiceId: vendorService._id
+                    }
+                },
+                // Unwind dates array to match specific date
+                {
+                    $unwind: '$dates'
+                },
+                // Match the specific date
+                {
+                    $match: {
+                        'dates.date': new Date(dt)
+                    }
+                },
+                // Add duration field from vendor service
+                {
+                    $addFields: {
+                        duration: vendorService.duration
+                    }
                 }
-            })
+            ]);
+            
+            // Step 4: Process the slots (similar to your original code)
+            if (slots.length > 0) {
+                slots.forEach((slot: any) => {
+                    const slots = getServiceSlots(
+                        slot.dates,
+                        slot.duration,
+                        appointments,
+                        slot.vendorServiceId
+                    );
+                    serviceSlotsByDate.push(slots);
+                });
+            }
         }
+        
+        // Group and return results (unchanged)
         serviceSlotsByDate = groupTimeSlots(serviceSlotsByDate);
         res.status(200).json({
             success: true,

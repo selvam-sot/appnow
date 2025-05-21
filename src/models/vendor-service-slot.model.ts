@@ -56,6 +56,7 @@ const VendorServiceSlotSchema: Schema = new Schema({
     },
     versionKey: '__v' // This matches the field in your DB output
 });
-
+VendorServiceSlotSchema.index({ vendorServiceId: 1 });
+VendorServiceSlotSchema.index({ 'dates.date': 1 });
 
 export default mongoose.model<IVendorServiceSlot & Document>('VendorServiceSlot', VendorServiceSlotSchema);

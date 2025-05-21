@@ -122,5 +122,6 @@ const VendorServiceSchema: Schema = new Schema({
 });
 
 VendorServiceSchema.index({ name: 1 });
+VendorServiceSchema.index({ serviceId: 1 });
 
 export default mongoose.model<IVendorService & Document>('VendorService', VendorServiceSchema);
