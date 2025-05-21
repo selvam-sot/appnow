@@ -8,10 +8,19 @@ import { Slot } from './../interfaces/common.interface';
 
 export const getVendorServiceSlots = asyncHandler(async (req: Request, res: Response) => {
     try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const payload = { 
             vendorServiceId: req.body.vendorServiceId,
             month: req.body.month,
             year: req.body.year,
+            dates: {
+                $elemMatch: {
+                    date: { 
+                        $gte: today
+                    }
+                }
+            }
         };
         let vendorServiceSlots: any = await VendorServiceSlot.find(payload);
         const appointments: any = []; // TODO
