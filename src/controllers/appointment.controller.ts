@@ -87,138 +87,130 @@ export const deleteAppointment = asyncHandler(async (req: Request, res: Response
     res.json({ message: 'Appointment cancelled successfully' });
 });
 
-export const appointmentOperations = async (req: Request, res: Response) => {
-    try {
-        if (req.body.type == 'create-booking') {
-            delete req.body.type;
-            
-            // Create Stripe payment intent if payment mode is credit-card
-            let paymentIntentId = null;
-            let clientSecret = null;
-            
-            if (req.body.paymentMode === 'credit-card') {
-                try {
-                    const paymentIntent = await StripeService.createPaymentIntent({
-                        amount: req.body.total,
-                        currency: 'usd',
-                        metadata: {
-                            appointmentType: 'booking',
-                            customerId: req.body.customerId,
-                            vendorServiceId: req.body.vendorServiceId,
-                        }
-                    });
-                    
-                    paymentIntentId = paymentIntent.id;
-                    clientSecret = paymentIntent.client_secret;
-                    
-                    // Add payment intent ID to appointment data
-                    req.body.paymentIntentId = paymentIntentId;
-                    req.body.paymentStatus = 'pending';
-                    
-                } catch (stripeError: any) {
-                    logger.error(`Stripe payment intent creation failed: ${stripeError.message}`);
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Payment processing failed',
-                        error: stripeError.message
-                    });
-                }
-            } else {
-                // For other payment methods, mark as completed
-                req.body.paymentStatus = 'completed';
-            }
-            
-            const appointment = await Appointment.create(req.body);
-            
-            res.status(201).json({
-                success: true,
-                data: appointment,
-                payment: {
-                    paymentIntentId,
-                    clientSecret,
-                    requiresPaymentMethod: req.body.paymentMode === 'credit-card'
-                }
-            });
-            
-        } else if (req.body.type == 'update-booking') {
-            delete req.body.type;
-            const { appointmentId, ...updateData } = req.body;
-            
-            const appointment = await Appointment.findByIdAndUpdate(
-                appointmentId, 
-                updateData, 
-                { new: true }
-            ).populate('customerId').populate('vendorServiceId');
-            
-            if (!appointment) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Appointment not found'
-                });
-            }
-            
-            res.status(200).json({
-                success: true,
-                data: appointment,
-            });
-            
-        } else if (req.body.type == 'confirm-payment') {
-            delete req.body.type;
-            const { paymentIntentId, appointmentId } = req.body;
-            
+// Fixed the type annotation to properly handle async function
+export const appointmentOperations = asyncHandler(async (req: Request, res: Response) => {
+    if (req.body.type == 'create-booking') {
+        delete req.body.type;
+        
+        // Create Stripe payment intent if payment mode is credit-card
+        let paymentIntentId = null;
+        let clientSecret = null;
+        
+        if (req.body.paymentMode === 'credit-card') {
             try {
-                // Verify payment with Stripe
-                const paymentIntent = await StripeService.confirmPaymentIntent(paymentIntentId);
+                const paymentIntent = await StripeService.createPaymentIntent({
+                    amount: req.body.total,
+                    currency: 'usd',
+                    metadata: {
+                        appointmentType: 'booking',
+                        customerId: req.body.customerId,
+                        vendorServiceId: req.body.vendorServiceId,
+                    }
+                });
                 
-                if (paymentIntent.status === 'succeeded') {
-                    // Update appointment payment status
-                    const appointment = await Appointment.findByIdAndUpdate(
-                        appointmentId,
-                        { 
-                            paymentStatus: 'completed',
-                            status: 'confirmed' 
-                        },
-                        { new: true }
-                    );
-                    
-                    res.status(200).json({
-                        success: true,
-                        message: 'Payment confirmed and appointment booked successfully',
-                        data: appointment
-                    });
-                } else {
-                    res.status(400).json({
-                        success: false,
-                        message: 'Payment not successful',
-                        paymentStatus: paymentIntent.status
-                    });
-                }
+                paymentIntentId = paymentIntent.id;
+                clientSecret = paymentIntent.client_secret;
+                
+                // Add payment intent ID to appointment data
+                req.body.paymentIntentId = paymentIntentId;
+                req.body.paymentStatus = 'pending';
                 
             } catch (stripeError: any) {
-                logger.error(`Payment confirmation failed: ${stripeError.message}`);
-                res.status(400).json({
+                logger.error(`Stripe payment intent creation failed: ${stripeError.message}`);
+                return res.status(400).json({
                     success: false,
-                    message: 'Payment confirmation failed',
+                    message: 'Payment processing failed',
                     error: stripeError.message
                 });
             }
-            
         } else {
-            // Get appointments
-            delete req.body.type;
-            const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
-            res.status(200).json({
-                success: true,
-                count: appointments.length,
-                data: appointments,
+            // For other payment methods, mark as completed
+            req.body.paymentStatus = 'completed';
+        }
+        
+        const appointment = await Appointment.create(req.body);
+        
+        res.status(201).json({
+            success: true,
+            data: appointment,
+            payment: {
+                paymentIntentId,
+                clientSecret,
+                requiresPaymentMethod: req.body.paymentMode === 'credit-card'
+            }
+        });
+        
+    } else if (req.body.type == 'update-booking') {
+        delete req.body.type;
+        const { appointmentId, ...updateData } = req.body;
+        
+        const appointment = await Appointment.findByIdAndUpdate(
+            appointmentId, 
+            updateData, 
+            { new: true }
+        ).populate('customerId').populate('vendorServiceId');
+        
+        if (!appointment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
             });
         }
-    } catch (error: any) {
-        logger.error(`Error in appointment operations: ${error.message}`);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error',
-            error: error.message 
+        
+        res.status(200).json({
+            success: true,
+            data: appointment,
+        });
+        
+    } else if (req.body.type == 'confirm-payment') {
+        delete req.body.type;
+        const { paymentIntentId, appointmentId } = req.body;
+        
+        try {
+            // Verify payment with Stripe
+            const paymentIntent = await StripeService.confirmPaymentIntent(paymentIntentId);
+            
+            if (paymentIntent.status === 'succeeded') {
+                // Update appointment payment status
+                const appointment = await Appointment.findByIdAndUpdate(
+                    appointmentId,
+                    { 
+                        paymentStatus: 'completed',
+                        status: 'confirmed' 
+                    },
+                    { new: true }
+                );
+                
+                res.status(200).json({
+                    success: true,
+                    message: 'Payment confirmed and appointment booked successfully',
+                    data: appointment
+                });
+            } else {
+                res.status(400).json({
+                    success: false,
+                    message: 'Payment not successful',
+                    paymentStatus: paymentIntent.status
+                });
+            }
+            
+        } catch (stripeError: any) {
+            logger.error(`Payment confirmation failed: ${stripeError.message}`);
+            res.status(400).json({
+                success: false,
+                message: 'Payment confirmation failed',
+                error: stripeError.message
+            });
+        }
+        
+    } else {
+        // Get appointments
+        delete req.body.type;
+        const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
+        res.status(200).json({
+            success: true,
+            count: appointments.length,
+            data: appointments,
         });
     }
-};
+});
