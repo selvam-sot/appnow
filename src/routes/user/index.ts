@@ -11,6 +11,7 @@ import appointmentRoutes from './appointment.routes';
 import manageAppointmentRoutes from './manage-appointment.routes';
 import monthlyServiceRoutes from './monthly-service.routes';
 import slotRoutes from './slot.routes';
+import paymentRoutes from './payment.routes';
 
 
 const router = Router();
@@ -26,5 +27,6 @@ router.use('/manage-appointments', manageAppointmentRoutes);
 router.use('/monthly-service', monthlyServiceRoutes);
 router.use('/slots', slotRoutes);
 router.use('/users', userRoutes);
+router.use('/payments', paymentRoutes);
 
 export default router;

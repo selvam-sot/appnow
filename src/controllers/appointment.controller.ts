@@ -5,8 +5,8 @@ import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import { sendBookingConfirmationEmail } from '../services/email.service';
 import { addEventToCalendar } from '../services/calendar.service';
+import StripeService from '../services/stripe.service';
 import logger from '../config/logger';
-
 
 export const createAppointment = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -41,30 +41,10 @@ export const createAppointment = asyncHandler(async (req: Request, res: Response
     res.status(201).json(appointment);
 });
 
-// export const getAppointments = asyncHandler(async (req: Request, res: Response) => {
-//     const appointments = await Appointment.find({ customer: req.user!._id })
-//         .populate({
-//         path: 'vendorService',
-//         populate: { path: 'vendor service' }
-//         });
-//     res.json(appointments);
-// });
-
 export const getAppointments = asyncHandler(async (req: Request, res: Response) => {
     const appointments = await Appointment.find().populate('customerId').populate('vendorServiceId');
     res.json(appointments);
 });
-
-// export const getAppointmentById = asyncHandler(async (req: Request, res: Response) => {
-//     const appointment = await Appointment.findById(req.params.id); //.populate('customerId').populate('vendorServiceId');
-//     if (!appointment) {
-//         throw new AppError('Appointment not found', 404);
-//     }
-//     if (appointment.customerId.toString() !== req.user!._id.toString()) {
-//         throw new AppError('Not authorized to access this appointment', 403);
-//     }
-//     res.json(appointment);
-// });
 
 export const getAppointmentById = asyncHandler(async (req: Request, res: Response) => {
     const appointment = await Appointment.findById(req.params.id).populate('customerId').populate('vendorServiceId');
@@ -111,14 +91,120 @@ export const appointmentOperations = async (req: Request, res: Response) => {
     try {
         if (req.body.type == 'create-booking') {
             delete req.body.type;
+            
+            // Create Stripe payment intent if payment mode is credit-card
+            let paymentIntentId = null;
+            let clientSecret = null;
+            
+            if (req.body.paymentMode === 'credit-card') {
+                try {
+                    const paymentIntent = await StripeService.createPaymentIntent({
+                        amount: req.body.total,
+                        currency: 'usd',
+                        metadata: {
+                            appointmentType: 'booking',
+                            customerId: req.body.customerId,
+                            vendorServiceId: req.body.vendorServiceId,
+                        }
+                    });
+                    
+                    paymentIntentId = paymentIntent.id;
+                    clientSecret = paymentIntent.client_secret;
+                    
+                    // Add payment intent ID to appointment data
+                    req.body.paymentIntentId = paymentIntentId;
+                    req.body.paymentStatus = 'pending';
+                    
+                } catch (stripeError: any) {
+                    logger.error(`Stripe payment intent creation failed: ${stripeError.message}`);
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Payment processing failed',
+                        error: stripeError.message
+                    });
+                }
+            } else {
+                // For other payment methods, mark as completed
+                req.body.paymentStatus = 'completed';
+            }
+            
             const appointment = await Appointment.create(req.body);
+            
             res.status(201).json({
                 success: true,
                 data: appointment,
+                payment: {
+                    paymentIntentId,
+                    clientSecret,
+                    requiresPaymentMethod: req.body.paymentMode === 'credit-card'
+                }
             });
+            
         } else if (req.body.type == 'update-booking') {
-            // update booking
+            delete req.body.type;
+            const { appointmentId, ...updateData } = req.body;
+            
+            const appointment = await Appointment.findByIdAndUpdate(
+                appointmentId, 
+                updateData, 
+                { new: true }
+            ).populate('customerId').populate('vendorServiceId');
+            
+            if (!appointment) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Appointment not found'
+                });
+            }
+            
+            res.status(200).json({
+                success: true,
+                data: appointment,
+            });
+            
+        } else if (req.body.type == 'confirm-payment') {
+            delete req.body.type;
+            const { paymentIntentId, appointmentId } = req.body;
+            
+            try {
+                // Verify payment with Stripe
+                const paymentIntent = await StripeService.confirmPaymentIntent(paymentIntentId);
+                
+                if (paymentIntent.status === 'succeeded') {
+                    // Update appointment payment status
+                    const appointment = await Appointment.findByIdAndUpdate(
+                        appointmentId,
+                        { 
+                            paymentStatus: 'completed',
+                            status: 'confirmed' 
+                        },
+                        { new: true }
+                    );
+                    
+                    res.status(200).json({
+                        success: true,
+                        message: 'Payment confirmed and appointment booked successfully',
+                        data: appointment
+                    });
+                } else {
+                    res.status(400).json({
+                        success: false,
+                        message: 'Payment not successful',
+                        paymentStatus: paymentIntent.status
+                    });
+                }
+                
+            } catch (stripeError: any) {
+                logger.error(`Payment confirmation failed: ${stripeError.message}`);
+                res.status(400).json({
+                    success: false,
+                    message: 'Payment confirmation failed',
+                    error: stripeError.message
+                });
+            }
+            
         } else {
+            // Get appointments
             delete req.body.type;
             const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
             res.status(200).json({
@@ -128,7 +214,11 @@ export const appointmentOperations = async (req: Request, res: Response) => {
             });
         }
     } catch (error: any) {
-        logger.error(`Error in fetching categories: ${error.message}`);
-        res.status(500).json({ message: 'Server error' });
+        logger.error(`Error in appointment operations: ${error.message}`);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error',
+            error: error.message 
+        });
     }
 };
