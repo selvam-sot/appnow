@@ -1,9 +1,7 @@
 import Stripe from 'stripe';
 import logger from '../config/logger';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-05-28.basil', // Fixed to match TypeScript types
-});
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
 
 export interface PaymentIntentData {
     amount: number; // in cents
