@@ -29,4 +29,5 @@ router.use('/slots', slotRoutes);
 router.use('/users', userRoutes);
 router.use('/payments', paymentRoutes);
 
+
 export default router;

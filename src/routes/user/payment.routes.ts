@@ -5,7 +5,9 @@ import {
     confirmPayment,
     createStripeCustomer,
     handleWebhook,
-    refundPayment
+    refundPayment,
+    confirmWithMethod,
+    createCheckoutSession
 } from '../../controllers/payment.controller';
 
 const router = express.Router();
@@ -35,7 +37,19 @@ router.post('/refund', [
     body('amount').optional().isNumeric().withMessage('Amount must be a number'),
 ], refundPayment);
 
+router.post('/confirm-with-method', [
+    body('paymentIntentId').notEmpty().withMessage('Payment intent ID is required'),
+    body('paymentMethodId').notEmpty().withMessage('Payment method ID is required'),
+], confirmWithMethod);
+
 // Webhook endpoint (no auth middleware)
 router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
+router.post('/create-checkout-session', [
+    body('amount').isNumeric().withMessage('Amount must be a number'),
+    body('currency').optional().isString().withMessage('Currency must be a string'),
+    body('successUrl').isURL().withMessage('Success URL must be valid'),
+    body('cancelUrl').isURL().withMessage('Cancel URL must be valid'),
+], createCheckoutSession);
 
 export default router;

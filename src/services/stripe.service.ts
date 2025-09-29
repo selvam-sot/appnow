@@ -2,7 +2,7 @@ import Stripe from 'stripe';
 import logger from '../config/logger';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-07-30.basil', // Updated to match the expected version
+    apiVersion: '2025-05-28.basil', // Fixed to match TypeScript types
 });
 
 export interface PaymentIntentData {
@@ -21,8 +21,9 @@ export interface CustomerData {
 export class StripeService {
     static async createPaymentIntent(data: PaymentIntentData): Promise<Stripe.PaymentIntent> {
         try {
+            console.log("Key:", process.env.STRIPE_SECRET_KEY!)
             const paymentIntent = await stripe.paymentIntents.create({
-                amount: Math.round(data.amount * 100), // Convert to cents
+                amount: Math.round(data.amount), // Convert to cents
                 currency: data.currency || 'usd',
                 customer: data.customerId,
                 metadata: data.metadata || {},
@@ -55,15 +56,22 @@ export class StripeService {
         }
     }
 
+    // static async confirmPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+    //     try {
+    //         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    //         logger.info(`Payment intent retrieved: ${paymentIntent.id}, status: ${paymentIntent.status}`);
+    //         return paymentIntent;
+    //     } catch (error: any) {
+    //         logger.error(`Error confirming payment intent: ${error.message}`);
+    //         throw new Error(`Failed to confirm payment intent: ${error.message}`);
+    //     }
+    // }
+
     static async confirmPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
-        try {
-            const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-            logger.info(`Payment intent retrieved: ${paymentIntent.id}, status: ${paymentIntent.status}`);
-            return paymentIntent;
-        } catch (error: any) {
-            logger.error(`Error confirming payment intent: ${error.message}`);
-            throw new Error(`Failed to confirm payment intent: ${error.message}`);
-        }
+        console.log("confirmPayment2")
+        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+        console.log("confirmPayment3")
+        return paymentIntent;
     }
 
     static async refundPayment(paymentIntentId: string, amount?: number): Promise<Stripe.Refund> {
@@ -92,6 +100,62 @@ export class StripeService {
         } catch (error: any) {
             logger.error(`Webhook signature verification failed: ${error.message}`);
             throw new Error(`Webhook signature verification failed: ${error.message}`);
+        }
+    }
+
+    static async confirmPaymentWithPaymentMethod(
+        paymentIntentId: string,
+        paymentMethodId: string,
+        returnUrl?: string
+    ): Promise<Stripe.PaymentIntent> {
+        try {
+            const paymentIntent = await stripe.paymentIntents.confirm(paymentIntentId, {
+                payment_method: paymentMethodId,
+                return_url: returnUrl || `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/return`
+            });
+
+            logger.info(`Payment intent confirmed: ${paymentIntent.id}, status: ${paymentIntent.status}`);
+            return paymentIntent;
+        } catch (error: any) {
+            logger.error(`Error confirming payment intent: ${error.message}`);
+            throw new Error(`Failed to confirm payment intent: ${error.message}`);
+        }
+    }
+
+    static async createCheckoutSession(data: {
+        amount: number;
+        currency: string;
+        metadata?: Record<string, string>;
+        successUrl: string;
+        cancelUrl: string;
+    }): Promise<Stripe.Checkout.Session> {
+        try {
+            const session = await stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                line_items: [
+                    {
+                        price_data: {
+                            currency: data.currency,
+                            product_data: {
+                                name: 'Appointment Service',
+                                description: 'Professional service appointment booking',
+                            },
+                            unit_amount: data.amount, // Already in cents from frontend
+                        },
+                        quantity: 1,
+                    },
+                ],
+                mode: 'payment',
+                success_url: data.successUrl,
+                cancel_url: data.cancelUrl,
+                metadata: data.metadata || {},
+            });
+
+            logger.info(`Checkout session created: ${session.id}`);
+            return session;
+        } catch (error: any) {
+            logger.error(`Error creating checkout session: ${error.message}`);
+            throw new Error(`Failed to create checkout session: ${error.message}`);
         }
     }
 }

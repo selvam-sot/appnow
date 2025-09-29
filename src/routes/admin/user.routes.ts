@@ -8,7 +8,7 @@ import {
     updateUserProfile,
     deleteUserAccount,
     getUsers
-} from './../../controllers/user.controller';
+} from '../../controllers/user.controller';
 import { protect, authorize } from './../../middlewares/auth.middleware';
 import { userValidationRules } from './../../utils/validation.util';
 

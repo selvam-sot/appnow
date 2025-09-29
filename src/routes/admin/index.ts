@@ -20,7 +20,6 @@ router.use('/vendor-service-slots', vendorServiceSlotRoutes);
 router.use('/appointments', appointmentRoutes);
 router.use('/manage-appointments', manageAppointmentRoutes);
 router.use('/monthly-service', monthlyServiceRoutes);
-
 router.use('/users', userRoutes);
 
 export default router;

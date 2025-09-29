@@ -32,10 +32,12 @@ const corsOptions = {
     'http://localhost:8081',
     'http://192.168.0.88:8081',
     'exp://192.168.0.88:8081',
-    // Add any other origins you need
+    'http://192.168.0.88:3000',
+    'http://localhost:3000',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 };
 app.use(cors(corsOptions));
 
@@ -67,7 +69,7 @@ try {
   const adminRoutes = require('./routes/admin').default;  
   const userRoutes = require('./routes/user').default;  
   app.use('/api/v1/admin', adminRoutes);
-  app.use('/api/v1/user', userRoutes);
+  app.use('/api/v1/customer', userRoutes);
   logger.info('Routes loaded successfully');
 } catch (error) {
   logger.error('Error loading routes:', error);
