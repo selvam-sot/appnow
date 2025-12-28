@@ -56,10 +56,14 @@ export const activateUser = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const loginUser = asyncHandler(async (req: Request, res: Response) => {
-    const { userName, password } = req.body;
+    const { userName, email, password } = req.body;
     console.log('login inside0', req.body);
-    
-    const user = await User.findOne({ userName }).select('+password');
+
+    // Support login by either userName or email
+    const loginField = email || userName;
+    const user = await User.findOne({
+        $or: [{ email: loginField }, { userName: loginField }]
+    }).select('+password');
 
     if (!user) {
         throw new AppError('Incorrect username or password', 401);
@@ -85,9 +89,9 @@ export const loginUser = asyncHandler(async (req: Request, res: Response) => {
     user.password = undefined;
 
     res.status(200).json({
-        status: 'success',
+        success: true,
         token,
-        data: { user }
+        user
     });
 });
 
@@ -163,7 +167,8 @@ export const deleteUserAccount = asyncHandler(async (req: Request, res: Response
 });
 
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
-    const users = await User.find({}).sort({ firstName: 1 });
+    // Sort by email which has a unique index (CosmosDB requires index for order-by)
+    const users = await User.find({}).sort({ email: 1 });
     res.status(200).json({
         success: true,
         count: users.length,

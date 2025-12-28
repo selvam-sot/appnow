@@ -18,8 +18,8 @@ export const getSubCategories = async (req: Request, res: Response) => {
             filter.isFavorite = isFavorite === 'true';
         }
 
-        const subCategories = await SubCategory.find(filter).sort({ subCategoryName: 1 });
-        
+        const subCategories = await SubCategory.find(filter).populate('categoryId').sort({ name: 1 });
+
         res.status(200).json({
             success: true,
             count: subCategories.length,

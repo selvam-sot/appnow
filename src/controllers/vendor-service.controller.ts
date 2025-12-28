@@ -15,7 +15,7 @@ export const createVendorService = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getVendorServices = asyncHandler(async (req: Request, res: Response) => {
-    const vendorServices = await VendorService.find().sort({serviceName: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
+    const vendorServices = await VendorService.find().sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
     res.json(vendorServices);
 });
 

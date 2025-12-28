@@ -34,8 +34,9 @@ const corsOptions = {
     'exp://192.168.0.88:8081',
     'http://192.168.0.88:3000',
     'http://localhost:3000',
+    'http://localhost:3001', // Admin panel
   ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 };

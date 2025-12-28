@@ -30,6 +30,7 @@ const VendorServiceSlotDetailsSchema: Schema = new Schema({
 const VendorServiceSlotSchema: Schema = new Schema({
     vendorServiceId: {
         type: mongoose.Schema.Types.ObjectId,
+        ref: 'VendorService',
         required: true
     },
     month: {

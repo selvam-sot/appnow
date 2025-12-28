@@ -15,7 +15,9 @@ export const createVendorServiceSlot = asyncHandler(async (req: Request, res: Re
 });
 
 export const getVendorServiceSlots = asyncHandler(async (req: Request, res: Response) => {
-    const vendorServiceSlots = await VendorServiceSlot.find().populate('vendorServiceId');
+    const vendorServiceSlots = await VendorServiceSlot.find()
+        .populate('vendorServiceId')
+        .sort({ _id: -1 }); // Sort by _id descending (newest first)
     res.json(vendorServiceSlots);
 });
 
