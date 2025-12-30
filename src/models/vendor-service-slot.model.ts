@@ -59,5 +59,7 @@ const VendorServiceSlotSchema: Schema = new Schema({
 });
 VendorServiceSlotSchema.index({ vendorServiceId: 1 });
 VendorServiceSlotSchema.index({ 'dates.date': 1 });
+// Compound index for efficient by-date queries across months
+VendorServiceSlotSchema.index({ vendorServiceId: 1, month: 1, year: 1 });
 
 export default mongoose.model<IVendorServiceSlot & Document>('VendorServiceSlot', VendorServiceSlotSchema);
