@@ -17,11 +17,24 @@ const checkSlotIsAvailable = (
             `${appointmentDate} ${appointment.end_time}`
         ).getTime();
         const appointmentCount = appointment.appointments;
-    
-        if (
-            (appointmentStartTs >= startTs && appointmentStartTs <= endTs) ||
-            (appointmentEndTs > startTs && appointmentEndTs <= endTs)
-        ) {
+
+        // Check for any overlap between appointment and slot:
+        // 1. Appointment starts within the slot (startTs <= appointmentStart < endTs)
+        // 2. Appointment ends within the slot (startTs < appointmentEnd <= endTs)
+        // 3. Appointment completely contains the slot (appointmentStart <= startTs && appointmentEnd >= endTs)
+        // 4. Exact match (appointmentStart === startTs && appointmentEnd === endTs)
+        const hasOverlap = (
+            // Exact match
+            (appointmentStartTs === startTs && appointmentEndTs === endTs) ||
+            // Appointment starts within slot
+            (appointmentStartTs >= startTs && appointmentStartTs < endTs) ||
+            // Appointment ends within slot
+            (appointmentEndTs > startTs && appointmentEndTs <= endTs) ||
+            // Appointment contains slot
+            (appointmentStartTs <= startTs && appointmentEndTs >= endTs)
+        );
+
+        if (hasOverlap) {
             availableSlots = availableSlots - appointmentCount;
         }
     }
