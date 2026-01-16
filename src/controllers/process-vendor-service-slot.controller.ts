@@ -131,6 +131,125 @@ export const getVendorServiceSlots = asyncHandler(async (req: Request, res: Resp
     }
 });
 
+/**
+ * Check if a specific slot is still available before payment
+ * Returns slot availability and alternative slots if not available
+ */
+export const checkSlotAvailability = asyncHandler(async (req: Request, res: Response) => {
+    try {
+        const { vendorServiceId, date, startTime, endTime, duration } = req.body;
+
+        if (!vendorServiceId || !date || !startTime || !endTime) {
+            res.status(400).json({
+                success: false,
+                error: 'Missing required fields',
+                message: 'vendorServiceId, date, startTime, and endTime are required',
+            });
+            return;
+        }
+
+        const checkDate = new Date(date);
+        checkDate.setHours(0, 0, 0, 0);
+
+        const dateStr = moment(checkDate).format('YYYY-MM-DD');
+
+        // Get the slot configuration for this date
+        const vendorServiceSlot = await VendorServiceSlot.findOne({
+            vendorServiceId,
+            month: checkDate.getMonth() + 1,
+            year: checkDate.getFullYear(),
+            'dates.date': checkDate
+        }).lean();
+
+        if (!vendorServiceSlot) {
+            res.status(200).json({
+                success: true,
+                available: false,
+                message: 'No slots configured for this date',
+                alternativeSlots: [],
+            });
+            return;
+        }
+
+        // Find the specific date details
+        const dateDetails = (vendorServiceSlot as any).dates.find((d: any) => {
+            const dDate = moment(d.date).format('YYYY-MM-DD');
+            return dDate === dateStr;
+        });
+
+        if (!dateDetails) {
+            res.status(200).json({
+                success: true,
+                available: false,
+                message: 'No slots configured for this date',
+                alternativeSlots: [],
+            });
+            return;
+        }
+
+        // Get appointments for this date
+        const appointments = await getAppointmentsByDate(
+            vendorServiceId,
+            checkDate,
+            new Date(checkDate.getTime() + 24 * 60 * 60 * 1000)
+        );
+
+        // Check if the specific slot is available
+        const slotStartTs = new Date(`${dateStr} ${startTime}`).getTime();
+        const slotEndTs = new Date(`${dateStr} ${endTime}`).getTime();
+
+        let availableCount = dateDetails.reoccurrence;
+
+        if (appointments[dateStr]) {
+            for (const appointment of appointments[dateStr]) {
+                const appointmentStartTs = new Date(`${dateStr} ${appointment.start_time}`).getTime();
+                const appointmentEndTs = new Date(`${dateStr} ${appointment.end_time}`).getTime();
+
+                const hasOverlap = (
+                    (appointmentStartTs === slotStartTs && appointmentEndTs === slotEndTs) ||
+                    (appointmentStartTs >= slotStartTs && appointmentStartTs < slotEndTs) ||
+                    (appointmentEndTs > slotStartTs && appointmentEndTs <= slotEndTs) ||
+                    (appointmentStartTs <= slotStartTs && appointmentEndTs >= slotEndTs)
+                );
+
+                if (hasOverlap) {
+                    availableCount -= appointment.appointments;
+                }
+            }
+        }
+
+        const isAvailable = availableCount > 0;
+
+        if (isAvailable) {
+            res.status(200).json({
+                success: true,
+                available: true,
+                availableSlots: availableCount,
+            });
+            return;
+        }
+
+        // Slot not available - get alternative slots for this date
+        const durationValue = duration || 60; // Default 60 minutes if not provided
+        const alternativeSlots = getServiceSlots(dateDetails, durationValue, appointments);
+
+        res.status(200).json({
+            success: true,
+            available: false,
+            message: 'This slot is no longer available',
+            alternativeSlots,
+            date: dateStr,
+        });
+    } catch (error) {
+        console.error('[checkSlotAvailability] Error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+    }
+});
+
 // Get next 15 active days with slots starting from a given date
 export const getVendorServiceSlotsByDate = asyncHandler(async (req: Request, res: Response) => {
     try {
