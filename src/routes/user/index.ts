@@ -12,6 +12,7 @@ import manageAppointmentRoutes from './manage-appointment.routes';
 import monthlyServiceRoutes from './monthly-service.routes';
 import slotRoutes from './slot.routes';
 import paymentRoutes from './payment.routes';
+import settingsRoutes from './settings.routes';
 
 
 const router = Router();
@@ -28,6 +29,7 @@ router.use('/monthly-service', monthlyServiceRoutes);
 router.use('/slots', slotRoutes);
 router.use('/users', userRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/settings', settingsRoutes);
 
 
 export default router;
