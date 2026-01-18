@@ -63,11 +63,16 @@ const UserSchema: Schema = new Schema({
         enum: ['customer', 'admin', 'vendor'],
         default: 'customer' // Changed from 'user' to 'customer' to match your enum
     },
-    tokenVersion: { 
+    tokenVersion: {
         type: Number,
         default: 0
     },
-    passwordChangedAt: Date
+    passwordChangedAt: Date,
+    // Push notification token (Expo Push Token)
+    expoPushToken: {
+        type: String,
+        sparse: true
+    }
 }, { 
     // Match the exact field names and structure from the database
     timestamps: {

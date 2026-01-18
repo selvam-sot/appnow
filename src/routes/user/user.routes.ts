@@ -1,6 +1,6 @@
 
 import express from 'express';
-import { 
+import {
     signupUser,
     loginUser,
     activateUser,
@@ -14,6 +14,7 @@ import {
     updateClerkUser,
     deleteClerkUser
 } from '../../controllers/user.controller';
+import { registerPushToken, removePushToken } from '../../controllers/notification.controller';
 import { protect, authorize } from '../../middlewares/auth.middleware';
 import { userValidationRules } from '../../utils/validation.util';
 
@@ -59,5 +60,11 @@ router.post('/clerk/sync', syncClerkUser);
 router.get('/clerk/:clerkId', getClerkUser);
 router.put('/clerk/:clerkId', updateClerkUser);
 router.delete('/clerk/:clerkId', deleteClerkUser);
+
+// ========== PUSH NOTIFICATION ROUTES ==========
+// Register push token for a user
+router.post('/push-token', registerPushToken);
+// Remove push token (on logout or disable notifications)
+router.delete('/push-token', removePushToken);
 
 export default router;

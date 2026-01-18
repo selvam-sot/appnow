@@ -19,6 +19,9 @@ export interface IUser extends Document {
     authProvider: 'local' | 'clerk';
     lastSyncedAt?: Date;
     fullName?: string; // Virtual field or computed property
+
+    // Push Notification
+    expoPushToken?: string;
     
     // Methods
     correctPassword(candidatePassword: string, userPassword: string): Promise<boolean>;
