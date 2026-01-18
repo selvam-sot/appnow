@@ -146,14 +146,15 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
 /**
  * Register push token for a user
  * POST /api/v1/users/push-token
+ * Accepts either clerkId or MongoDB _id
  */
 export const registerPushToken = asyncHandler(async (req: Request, res: Response) => {
-    const { userId, pushToken } = req.body;
+    const { userId, clerkId, pushToken } = req.body;
 
-    if (!userId || !pushToken) {
+    if ((!userId && !clerkId) || !pushToken) {
         return res.status(400).json({
             success: false,
-            message: 'User ID and push token are required',
+            message: 'User ID (or clerkId) and push token are required',
         });
     }
 
@@ -165,11 +166,21 @@ export const registerPushToken = asyncHandler(async (req: Request, res: Response
         });
     }
 
-    const user = await User.findByIdAndUpdate(
-        userId,
-        { expoPushToken: pushToken },
-        { new: true }
-    );
+    // Find user by clerkId or MongoDB _id
+    let user;
+    if (clerkId) {
+        user = await User.findOneAndUpdate(
+            { clerkId },
+            { expoPushToken: pushToken },
+            { new: true }
+        );
+    } else {
+        user = await User.findByIdAndUpdate(
+            userId,
+            { expoPushToken: pushToken },
+            { new: true }
+        );
+    }
 
     if (!user) {
         return res.status(404).json({
@@ -187,22 +198,33 @@ export const registerPushToken = asyncHandler(async (req: Request, res: Response
 /**
  * Remove push token for a user (on logout or disable notifications)
  * DELETE /api/v1/users/push-token
+ * Accepts either clerkId or MongoDB _id
  */
 export const removePushToken = asyncHandler(async (req: Request, res: Response) => {
-    const { userId } = req.body;
+    const { userId, clerkId } = req.body;
 
-    if (!userId) {
+    if (!userId && !clerkId) {
         return res.status(400).json({
             success: false,
-            message: 'User ID is required',
+            message: 'User ID or clerkId is required',
         });
     }
 
-    const user = await User.findByIdAndUpdate(
-        userId,
-        { $unset: { expoPushToken: 1 } },
-        { new: true }
-    );
+    // Find user by clerkId or MongoDB _id
+    let user;
+    if (clerkId) {
+        user = await User.findOneAndUpdate(
+            { clerkId },
+            { $unset: { expoPushToken: 1 } },
+            { new: true }
+        );
+    } else {
+        user = await User.findByIdAndUpdate(
+            userId,
+            { $unset: { expoPushToken: 1 } },
+            { new: true }
+        );
+    }
 
     if (!user) {
         return res.status(404).json({
