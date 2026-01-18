@@ -35,7 +35,7 @@ async function sendExpoPushNotifications(messages: ExpoPushMessage[]): Promise<E
         body: JSON.stringify(messages),
     });
 
-    const result = await response.json();
+    const result = await response.json() as { data?: ExpoPushTicket[] };
     return result.data || [];
 }
 
@@ -69,8 +69,9 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
     }
 
     // Build query to find users with push tokens
-    let query: Record<string, unknown> = {
-        expoPushToken: { $exists: true, $ne: null, $ne: '' },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const query: Record<string, any> = {
+        expoPushToken: { $exists: true, $nin: [null, ''] },
         role: 'customer',
     };
 
