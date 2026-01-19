@@ -7,6 +7,7 @@ import {
     handleWebhook,
     refundPayment,
     confirmWithMethod,
+    confirmWithCard,
     createCheckoutSession
 } from '../../controllers/payment.controller';
 
@@ -41,6 +42,15 @@ router.post('/confirm-with-method', [
     body('paymentIntentId').notEmpty().withMessage('Payment intent ID is required'),
     body('paymentMethodId').notEmpty().withMessage('Payment method ID is required'),
 ], confirmWithMethod);
+
+// Confirm payment with raw card details (Android fallback)
+router.post('/confirm-with-card', [
+    body('payment_intent_id').notEmpty().withMessage('Payment intent ID is required'),
+    body('card_number').notEmpty().withMessage('Card number is required'),
+    body('exp_month').notEmpty().withMessage('Expiry month is required'),
+    body('exp_year').notEmpty().withMessage('Expiry year is required'),
+    body('cvc').notEmpty().withMessage('CVC is required'),
+], confirmWithCard);
 
 // Webhook endpoint (no auth middleware)
 router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);

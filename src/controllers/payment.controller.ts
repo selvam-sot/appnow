@@ -226,6 +226,55 @@ export const confirmWithMethod = asyncHandler(async (req: Request, res: Response
     }
 })
 
+// Confirm payment using raw card details (Android fallback flow)
+export const confirmWithCard = asyncHandler(async (req: Request, res: Response) => {
+    try {
+        const { payment_intent_id, card_number, exp_month, exp_year, cvc } = req.body;
+
+        if (!payment_intent_id || !card_number || !exp_month || !exp_year || !cvc) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required card details',
+            });
+        }
+
+        // Parse expiry - handle both "MM" and "YYYY" or "YY" formats
+        const expMonth = parseInt(exp_month, 10);
+        let expYear = parseInt(exp_year, 10);
+
+        // If year is 2 digits, add 2000
+        if (expYear < 100) {
+            expYear += 2000;
+        }
+
+        const paymentIntent = await StripeService.confirmPaymentWithCard(
+            payment_intent_id,
+            {
+                number: card_number,
+                exp_month: expMonth,
+                exp_year: expYear,
+                cvc: cvc,
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            data: {
+                id: paymentIntent.id,
+                status: paymentIntent.status,
+                amount: paymentIntent.amount / 100,
+                currency: paymentIntent.currency,
+            }
+        });
+    } catch (error: any) {
+        logger.error(`Error confirming payment with card: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to process payment',
+        });
+    }
+});
+
 export const createCheckoutSession = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

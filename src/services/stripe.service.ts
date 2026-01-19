@@ -120,6 +120,44 @@ export class StripeService {
         }
     }
 
+    // Create a payment method from raw card details and confirm payment
+    // This is used for Android fallback flow where native SDK is not available
+    static async confirmPaymentWithCard(
+        paymentIntentId: string,
+        cardDetails: {
+            number: string;
+            exp_month: number;
+            exp_year: number;
+            cvc: string;
+        }
+    ): Promise<Stripe.PaymentIntent> {
+        try {
+            // First, create a payment method from the card details
+            const paymentMethod = await stripe.paymentMethods.create({
+                type: 'card',
+                card: {
+                    number: cardDetails.number.replace(/\s/g, ''), // Remove spaces
+                    exp_month: cardDetails.exp_month,
+                    exp_year: cardDetails.exp_year,
+                    cvc: cardDetails.cvc,
+                },
+            });
+
+            logger.info(`Payment method created: ${paymentMethod.id}`);
+
+            // Then confirm the payment intent with the payment method
+            const paymentIntent = await stripe.paymentIntents.confirm(paymentIntentId, {
+                payment_method: paymentMethod.id,
+            });
+
+            logger.info(`Payment intent confirmed: ${paymentIntent.id}, status: ${paymentIntent.status}`);
+            return paymentIntent;
+        } catch (error: any) {
+            logger.error(`Error confirming payment with card: ${error.message}`);
+            throw new Error(`Failed to confirm payment: ${error.message}`);
+        }
+    }
+
     static async createCheckoutSession(data: {
         amount: number;
         currency: string;
