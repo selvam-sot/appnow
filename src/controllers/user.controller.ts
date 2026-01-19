@@ -198,21 +198,18 @@ export const syncClerkUser = asyncHandler(async (req: Request, res: Response) =>
     console.log('3')
     if (user) {
         console.log('4')
-        // Update existing user
-        if (!user.clerkId) {
-            user.clerkId = clerkId;
-            user.authProvider = 'clerk';
-        }
-        
+        // Update existing user - always update clerkId to handle Clerk account changes
+        user.clerkId = clerkId;
+        user.authProvider = 'clerk';
         user.email = email;
         user.firstName = firstName || user.firstName;
         user.lastName = lastName || user.lastName;
         user.isActive = true;
         user.lastSyncedAt = new Date();
-        
+
         await user.save();
-        
-        console.log(`Updated existing user: ${email}`);
+
+        console.log(`Updated existing user: ${email} with clerkId: ${clerkId}`);
     } else {
         console.log('5')
         // Create new user
