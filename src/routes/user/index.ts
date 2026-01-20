@@ -13,6 +13,7 @@ import monthlyServiceRoutes from './monthly-service.routes';
 import slotRoutes from './slot.routes';
 import paymentRoutes from './payment.routes';
 import settingsRoutes from './settings.routes';
+import notificationRoutes from './notification.routes';
 
 
 const router = Router();
@@ -30,6 +31,7 @@ router.use('/slots', slotRoutes);
 router.use('/users', userRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/notifications', notificationRoutes);
 
 
 export default router;

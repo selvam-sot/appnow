@@ -1,11 +1,13 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import Appointment from '../models/appointment.model';
+import VendorService from '../models/vendor-service.model';
 import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import { sendBookingConfirmationEmail } from '../services/email.service';
 import { addEventToCalendar } from '../services/calendar.service';
 import StripeService from '../services/stripe.service';
+import { sendBookingConfirmationNotification } from '../services/pushNotification.service';
 import logger from '../config/logger';
 
 export const createAppointment = asyncHandler(async (req: Request, res: Response) => {
@@ -129,7 +131,40 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
         }
         
         const appointment = await Appointment.create(req.body);
-        
+
+        // Send booking confirmation push notification
+        try {
+            // Get vendor service details for the notification
+            const vendorService = await VendorService.findById(req.body.vendorServiceId)
+                .populate('vendorId', 'name')
+                .populate('serviceId', 'name')
+                .lean();
+
+            if (vendorService) {
+                const appointmentDate = new Date(req.body.appointmentDate);
+                const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                });
+
+                await sendBookingConfirmationNotification(
+                    req.body.customerId,
+                    {
+                        serviceName: (vendorService.serviceId as any)?.name || 'Service',
+                        vendorName: (vendorService.vendorId as any)?.name,
+                        date: formattedDate,
+                        time: req.body.startTime,
+                        appointmentId: appointment._id.toString(),
+                    }
+                );
+                logger.info(`Booking confirmation notification sent for appointment ${appointment._id}`);
+            }
+        } catch (notificationError: any) {
+            // Don't fail the booking if notification fails
+            logger.error(`Failed to send booking confirmation notification: ${notificationError.message}`);
+        }
+
         res.status(201).json({
             success: true,
             data: appointment,

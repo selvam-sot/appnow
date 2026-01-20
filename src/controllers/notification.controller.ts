@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import User from '../models/user.model';
+import Notification from '../models/notification.model';
+import { NotificationResponse } from '../interfaces/notification.interface';
 
 interface ExpoPushMessage {
     to: string;
@@ -80,7 +82,7 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
     }
 
     // Get users with push tokens
-    const users = await User.find(query).select('_id email expoPushToken').lean();
+    const users = await User.find(query).select('_id email clerkId expoPushToken').lean();
 
     if (users.length === 0) {
         return res.status(200).json({
@@ -89,6 +91,28 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
             sentCount: 0,
             failedCount: 0,
         });
+    }
+
+    // Save notifications to database for all target users
+    const notificationsToSave = users
+        .filter(user => user.clerkId) // Only save for users with clerkId
+        .map(user => ({
+            userId: user.clerkId,
+            type: data?.type || 'system',
+            title,
+            body,
+            data: data || {},
+            read: false,
+        }));
+
+    if (notificationsToSave.length > 0) {
+        try {
+            await Notification.insertMany(notificationsToSave);
+            console.log(`Saved ${notificationsToSave.length} notifications to database`);
+        } catch (dbError) {
+            console.error('Error saving notifications to database:', dbError);
+            // Continue with push notifications even if DB save fails
+        }
     }
 
     // Prepare push messages
@@ -274,5 +298,188 @@ export const removePushToken = asyncHandler(async (req: Request, res: Response) 
     res.status(200).json({
         success: true,
         message: 'Push token removed successfully',
+    });
+});
+
+// ==================== CUSTOMER NOTIFICATION ENDPOINTS ====================
+
+/**
+ * Get notifications for a user
+ * GET /api/v1/customer/notifications/:clerkId
+ */
+export const getUserNotifications = asyncHandler(async (req: Request, res: Response) => {
+    const { clerkId } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    if (!clerkId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Clerk ID is required',
+        });
+    }
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [notifications, total] = await Promise.all([
+        Notification.find({ userId: clerkId })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        Notification.countDocuments({ userId: clerkId }),
+    ]);
+
+    const formattedNotifications: NotificationResponse[] = notifications.map(n => ({
+        id: n._id.toString(),
+        type: n.type,
+        title: n.title,
+        message: n.body,
+        timestamp: n.createdAt.toISOString(),
+        read: n.read,
+        data: n.data,
+    }));
+
+    res.status(200).json({
+        success: true,
+        data: formattedNotifications,
+        pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+        },
+    });
+});
+
+/**
+ * Get unread notification count for a user
+ * GET /api/v1/customer/notifications/:clerkId/unread-count
+ */
+export const getUnreadCount = asyncHandler(async (req: Request, res: Response) => {
+    const { clerkId } = req.params;
+
+    if (!clerkId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Clerk ID is required',
+        });
+    }
+
+    const count = await Notification.countDocuments({ userId: clerkId, read: false });
+
+    res.status(200).json({
+        success: true,
+        data: { unreadCount: count },
+    });
+});
+
+/**
+ * Mark a notification as read
+ * PATCH /api/v1/customer/notifications/:notificationId/read
+ */
+export const markAsRead = asyncHandler(async (req: Request, res: Response) => {
+    const { notificationId } = req.params;
+
+    if (!notificationId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Notification ID is required',
+        });
+    }
+
+    const notification = await Notification.findByIdAndUpdate(
+        notificationId,
+        { read: true },
+        { new: true }
+    );
+
+    if (!notification) {
+        return res.status(404).json({
+            success: false,
+            message: 'Notification not found',
+        });
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Notification marked as read',
+    });
+});
+
+/**
+ * Mark all notifications as read for a user
+ * PATCH /api/v1/customer/notifications/:clerkId/read-all
+ */
+export const markAllAsRead = asyncHandler(async (req: Request, res: Response) => {
+    const { clerkId } = req.params;
+
+    if (!clerkId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Clerk ID is required',
+        });
+    }
+
+    await Notification.updateMany(
+        { userId: clerkId, read: false },
+        { read: true }
+    );
+
+    res.status(200).json({
+        success: true,
+        message: 'All notifications marked as read',
+    });
+});
+
+/**
+ * Delete a notification
+ * DELETE /api/v1/customer/notifications/:notificationId
+ */
+export const deleteNotification = asyncHandler(async (req: Request, res: Response) => {
+    const { notificationId } = req.params;
+
+    if (!notificationId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Notification ID is required',
+        });
+    }
+
+    const notification = await Notification.findByIdAndDelete(notificationId);
+
+    if (!notification) {
+        return res.status(404).json({
+            success: false,
+            message: 'Notification not found',
+        });
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Notification deleted',
+    });
+});
+
+/**
+ * Delete all notifications for a user
+ * DELETE /api/v1/customer/notifications/:clerkId/all
+ */
+export const deleteAllNotifications = asyncHandler(async (req: Request, res: Response) => {
+    const { clerkId } = req.params;
+
+    if (!clerkId) {
+        return res.status(400).json({
+            success: false,
+            message: 'Clerk ID is required',
+        });
+    }
+
+    await Notification.deleteMany({ userId: clerkId });
+
+    res.status(200).json({
+        success: true,
+        message: 'All notifications deleted',
     });
 });
