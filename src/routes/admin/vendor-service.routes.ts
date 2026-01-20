@@ -1,14 +1,14 @@
 import express from 'express';
+import { protect, authorize } from './../../middlewares/auth.middleware';
 import { createVendorService, getVendorServices, getVendorServiceById, updateVendorService, deleteVendorService } from './../../controllers/vendor-service.controller';
 
 const router = express.Router();
 
-//router.post('/', protect, authorize('admin'), vendorServiceValidationRules.create(), createVendorService);
-router.post('/', createVendorService);
-router.get('/', getVendorServices);
-router.get('/:id', getVendorServiceById);
-//router.put('/:id', protect, authorize('admin'), vendorServiceValidationRules.update(), updateVendorService);
-router.put('/:id', updateVendorService);
-router.delete('/:id', deleteVendorService);
+// All admin routes require authentication and admin role
+router.post('/', protect, authorize('admin'), createVendorService);
+router.get('/', protect, authorize('admin'), getVendorServices);
+router.get('/:id', protect, authorize('admin'), getVendorServiceById);
+router.put('/:id', protect, authorize('admin'), updateVendorService);
+router.delete('/:id', protect, authorize('admin'), deleteVendorService);
 
 export default router;

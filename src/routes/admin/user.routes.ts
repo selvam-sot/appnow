@@ -1,5 +1,5 @@
 import express from 'express';
-import { 
+import {
     signupUser,
     loginUser,
     activateUser,
@@ -14,17 +14,18 @@ import { userValidationRules } from './../../utils/validation.util';
 
 const router = express.Router();
 
-// Public routes
+// Public routes (for admin login)
 router.post('/signup', userValidationRules.create(), signupUser);
 router.post('/login', userValidationRules.login(), loginUser);
 router.get('/activate/:activationToken', activateUser);
 
-// Protected routes
+// Protected routes (require authentication)
 router.post('/logout', protect, logoutUser);
 router.get('/profile', protect, getUserProfile);
 router.put('/profile', protect, userValidationRules.update(), updateUserProfile);
-router.delete('/account', authorize('admin'), deleteUserAccount);
-router.route('/').get(getUsers);
+
+// Admin-only routes
+router.delete('/account', protect, authorize('admin'), deleteUserAccount);
+router.get('/', protect, authorize('admin'), getUsers);
 
 export default router;
-

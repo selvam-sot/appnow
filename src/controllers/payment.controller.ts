@@ -15,13 +15,16 @@ export const createPaymentIntent = asyncHandler(async (req: Request, res: Respon
     const { amount, currency = 'usd', customerId, metadata } = req.body;
 
     try {
+        // Get userId from metadata (passed from client) or from authenticated user
+        const userId = metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
+
         const paymentIntent = await StripeService.createPaymentIntent({
             amount,
             currency,
             customerId,
             metadata: {
                 ...metadata,
-                userId: 'anonymous', // Temporarily hardcoded instead of req.user
+                userId,
             }
         });
 
@@ -218,7 +221,7 @@ export const confirmWithMethod = asyncHandler(async (req: Request, res: Response
             }
         });
     } catch (error: any) {
-        console.error(`Error confirming payment with method: ${error.message}`);
+        logger.error(`Error confirming payment with method: ${error.message}`);
         res.status(500).json({
             success: false,
             message: error.message
@@ -284,12 +287,15 @@ export const createCheckoutSession = asyncHandler(async (req: Request, res: Resp
     const { amount, currency = 'usd', metadata, successUrl, cancelUrl } = req.body;
 
     try {
+        // Get userId from metadata (passed from client) or from authenticated user
+        const userId = metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
+
         const session = await StripeService.createCheckoutSession({
             amount,
             currency,
             metadata: {
                 ...metadata,
-                userId: 'anonymous',
+                userId,
             },
             successUrl,
             cancelUrl,

@@ -1,17 +1,13 @@
 import express from 'express';
 import { protect, authorize } from './../../middlewares/auth.middleware';
-import { asyncHandler } from './../../utils/asyncHandler.util';
-import { createMonthlyService, getMonthlyServices, getMonthlyServiceById, updateMonthlyService, deleteMonthlyService } from './../../controllers/monthly-service.controller';
-import { monthlyServiceValidationRules } from './../../utils/validation.util';
+import { getMonthlyServices, getMonthlyServiceById, deleteMonthlyService } from './../../controllers/monthly-service.controller';
 
 const router = express.Router();
 
-//router.post('/', protect, authorize('admin'), monthlyServiceValidationRules.create(), createMonthlyService);
-//router.post('/', monthlyServiceValidationRules.create(), createMonthlyService);
-router.get('/', getMonthlyServices);
-router.get('/:id', getMonthlyServiceById);
-//router.put('/:id', protect, authorize('admin'), monthlyServiceValidationRules.update(), updateMonthlyService);
-//router.put('/:id', monthlyServiceValidationRules.update(), updateMonthlyService);
+// All admin routes require authentication and admin role
+// Note: Create and Update are not implemented yet (read-only for now)
+router.get('/', protect, authorize('admin'), getMonthlyServices);
+router.get('/:id', protect, authorize('admin'), getMonthlyServiceById);
 router.delete('/:id', protect, authorize('admin'), deleteMonthlyService);
 
 export default router;

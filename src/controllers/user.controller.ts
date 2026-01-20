@@ -33,9 +33,15 @@ export const signupUser = asyncHandler(async (req: Request, res: Response) => {
     });
 
     // Send activation email
-    //await sendActivationEmail(email, activationToken);
+    try {
+        await sendActivationEmail(email, activationToken);
+    } catch (emailError) {
+        // Log email error but don't fail the signup
+        console.error('Failed to send activation email:', emailError);
+    }
 
     res.status(201).json({
+        success: true,
         message: 'User created successfully. Please check your email to activate your account.'
     });
 });
@@ -57,7 +63,6 @@ export const activateUser = asyncHandler(async (req: Request, res: Response) => 
 
 export const loginUser = asyncHandler(async (req: Request, res: Response) => {
     const { userName, email, password } = req.body;
-    console.log('login inside0', req.body);
 
     // Support login by either userName or email
     const loginField = email || userName;
@@ -79,9 +84,7 @@ export const loginUser = asyncHandler(async (req: Request, res: Response) => {
         throw new AppError('Incorrect username or password', 401);
     }
 
-    console.log('login inside1');
     const token = signToken(user._id, user.role, user.tokenVersion);
-    console.log('login inside2', token);
 
     setTokenCookie(res, token);
 
@@ -161,9 +164,14 @@ export const deleteUserAccount = asyncHandler(async (req: Request, res: Response
         throw new AppError('User not found', 404);
     }
 
-    //await user.remove();
+    // Actually delete the user from database
+    await User.findByIdAndDelete(req.user!.id);
+
     res.clearCookie('jwt');
-    res.json({ message: 'User account deleted successfully' });
+    res.status(200).json({
+        success: true,
+        message: 'User account deleted successfully'
+    });
 });
 
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
@@ -179,25 +187,21 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
 // ========== CLERK INTEGRATION FUNCTIONS ==========
 
 export const syncClerkUser = asyncHandler(async (req: Request, res: Response) => {
-    console.log('1')
     const { clerkId, email, firstName, lastName, fullName, imageUrl } = req.body;
-    
+
     if (!clerkId || !email) {
         throw new AppError('Clerk ID and email are required', 400);
     }
-    console.log('2')
-    
+
     // Check if user already exists
-    let user = await User.findOne({ 
+    let user = await User.findOne({
         $or: [
             { clerkId: clerkId },
             { email: email }
         ]
     });
-    
-    console.log('3')
+
     if (user) {
-        console.log('4')
         // Update existing user - always update clerkId to handle Clerk account changes
         user.clerkId = clerkId;
         user.authProvider = 'clerk';
@@ -208,10 +212,7 @@ export const syncClerkUser = asyncHandler(async (req: Request, res: Response) =>
         user.lastSyncedAt = new Date();
 
         await user.save();
-
-        console.log(`Updated existing user: ${email} with clerkId: ${clerkId}`);
     } else {
-        console.log('5')
         // Create new user
         user = await User.create({
             clerkId,
@@ -223,10 +224,7 @@ export const syncClerkUser = asyncHandler(async (req: Request, res: Response) =>
             isActive: true,
             lastSyncedAt: new Date()
         });
-        console.log('6')
-        console.log(`Created new Clerk user: ${email}`);
     }
-    console.log('7')
     res.status(200).json({
         success: true,
         message: 'User synced successfully',
