@@ -67,6 +67,18 @@ function sanitizeMongoOperators(value: unknown): unknown {
 }
 
 /**
+ * Sanitize object in place (modifies the original object)
+ */
+function sanitizeInPlace(obj: Record<string, any>, sanitizer: (val: unknown) => unknown): void {
+    for (const key of Object.keys(obj)) {
+        const sanitized = sanitizer(obj[key]);
+        if (sanitized !== obj[key]) {
+            obj[key] = sanitized;
+        }
+    }
+}
+
+/**
  * XSS Sanitization middleware
  * Sanitizes request body, query, and params to prevent XSS attacks
  */
@@ -75,12 +87,14 @@ export const xssSanitize = (req: Request, res: Response, next: NextFunction) => 
         req.body = sanitizeValue(req.body);
     }
 
-    if (req.query) {
-        req.query = sanitizeValue(req.query) as typeof req.query;
+    // Sanitize query params in place (req.query is read-only in Node.js 20+)
+    if (req.query && typeof req.query === 'object') {
+        sanitizeInPlace(req.query as Record<string, any>, sanitizeValue);
     }
 
-    if (req.params) {
-        req.params = sanitizeValue(req.params) as typeof req.params;
+    // Sanitize route params in place (req.params is read-only in Node.js 20+)
+    if (req.params && typeof req.params === 'object') {
+        sanitizeInPlace(req.params as Record<string, any>, sanitizeValue);
     }
 
     next();
@@ -96,12 +110,14 @@ export const lightSanitize = (req: Request, res: Response, next: NextFunction) =
         req.body = sanitizeMongoOperators(req.body);
     }
 
-    if (req.query) {
-        req.query = sanitizeMongoOperators(req.query) as typeof req.query;
+    // Sanitize query params in place (req.query is read-only in Node.js 20+)
+    if (req.query && typeof req.query === 'object') {
+        sanitizeInPlace(req.query as Record<string, any>, sanitizeMongoOperators);
     }
 
-    if (req.params) {
-        req.params = sanitizeMongoOperators(req.params) as typeof req.params;
+    // Sanitize route params in place (req.params is read-only in Node.js 20+)
+    if (req.params && typeof req.params === 'object') {
+        sanitizeInPlace(req.params as Record<string, any>, sanitizeMongoOperators);
     }
 
     next();
