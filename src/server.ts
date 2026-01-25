@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import mongoSanitize from 'express-mongo-sanitize';
 import hpp from 'hpp';
 import { connectToDatabase } from './config/database';
 import winston from 'winston';
@@ -54,9 +53,10 @@ app.use(cors(corsOptions));
 
 // Security middleware
 app.use(helmet()); // Set security HTTP headers
-app.use(mongoSanitize()); // Sanitize data against NoSQL injection
+// Note: express-mongo-sanitize removed due to Node.js 20+ making req.query read-only
+// Our xssSanitize middleware handles NoSQL injection prevention by filtering $ operators
 app.use(hpp()); // Prevent HTTP Parameter Pollution
-app.use(xssSanitize); // Sanitize user input against XSS
+app.use(xssSanitize); // Sanitize user input against XSS and NoSQL injection
 
 // Rate limiting - apply to all API routes
 app.use('/api/', generalLimiter);
