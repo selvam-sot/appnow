@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import Appointment from '../models/appointment.model';
 import VendorService from '../models/vendor-service.model';
+import Vendor from '../models/vendor.model';
 import SlotLock from '../models/slot-lock.model';
 import User from '../models/user.model';
 import { AppError } from '../utils/appError.util';
@@ -47,7 +48,21 @@ export const createAppointment = asyncHandler(async (req: Request, res: Response
 });
 
 export const getAppointments = asyncHandler(async (req: Request, res: Response) => {
-    const appointments = await Appointment.find().populate('customerId').populate('vendorServiceId');
+    // Build filter - for vendor users, only show their appointments
+    const filter: Record<string, any> = {};
+
+    if (req.user && req.user.role === 'vendor') {
+        // Find the vendor associated with this user
+        const vendor = await Vendor.findOne({ userId: req.user._id });
+        if (vendor) {
+            // Get all vendor services for this vendor
+            const vendorServices = await VendorService.find({ vendorId: vendor._id }).select('_id');
+            const serviceIds = vendorServices.map(vs => vs._id);
+            filter.vendorServiceId = { $in: serviceIds };
+        }
+    }
+
+    const appointments = await Appointment.find(filter).populate('customerId').populate('vendorServiceId');
     res.json(appointments);
 });
 

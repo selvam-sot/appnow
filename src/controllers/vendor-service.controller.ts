@@ -18,7 +18,18 @@ export const createVendorService = asyncHandler(async (req: Request, res: Respon
 });
 
 export const getVendorServices = asyncHandler(async (req: Request, res: Response) => {
-    const vendorServices = await VendorService.find().sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
+    // Build filter - for vendor users, only show their own services
+    const filter: Record<string, any> = {};
+
+    if (req.user && req.user.role === 'vendor') {
+        // Find the vendor associated with this user
+        const vendor = await Vendor.findOne({ userId: req.user._id });
+        if (vendor) {
+            filter.vendorId = vendor._id;
+        }
+    }
+
+    const vendorServices = await VendorService.find(filter).sort({name: 1}).populate('categoryId').populate('subCategoryId').populate('vendorId').populate('serviceId');
     res.json(vendorServices);
 });
 

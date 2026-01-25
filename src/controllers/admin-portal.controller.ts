@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import { AppError } from '../utils/appError.util';
 import User from '../models/user.model';
+import Vendor from '../models/vendor.model';
 
 /**
  * Sync admin/vendor user from Clerk
@@ -45,6 +46,15 @@ export const syncAdmin = asyncHandler(async (req: Request, res: Response) => {
         throw new AppError('Account not found. Please contact system administrator.', 404);
     }
 
+    // For vendor users, fetch the associated vendor record
+    let vendorId = null;
+    if (user.role === 'vendor') {
+        const vendor = await Vendor.findOne({ userId: user._id });
+        if (vendor) {
+            vendorId = vendor._id;
+        }
+    }
+
     res.status(200).json({
         success: true,
         data: {
@@ -53,7 +63,8 @@ export const syncAdmin = asyncHandler(async (req: Request, res: Response) => {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            role: user.role
+            role: user.role,
+            vendorId: vendorId
         }
     });
 });

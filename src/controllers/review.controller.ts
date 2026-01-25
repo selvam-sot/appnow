@@ -396,6 +396,14 @@ export const getAllReviews = asyncHandler(async (req: Request, res: Response) =>
     const query: any = {};
     if (status) query.status = status;
 
+    // For vendor users, only show reviews for their services
+    if (req.user && req.user.role === 'vendor') {
+        const vendor = await Vendor.findOne({ userId: req.user._id });
+        if (vendor) {
+            query.vendorId = vendor._id;
+        }
+    }
+
     const reviews = await Review.find(query)
         .populate('customerId', 'firstName lastName email')
         .populate('vendorServiceId', 'name')
