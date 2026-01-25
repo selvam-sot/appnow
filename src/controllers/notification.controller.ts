@@ -2,6 +2,10 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import User from '../models/user.model';
 import Notification from '../models/notification.model';
+import Vendor from '../models/vendor.model';
+import VendorService from '../models/vendor-service.model';
+import Appointment from '../models/appointment.model';
+import Review from '../models/review.model';
 import { NotificationResponse } from '../interfaces/notification.interface';
 
 interface ExpoPushMessage {
@@ -481,5 +485,166 @@ export const deleteAllNotifications = asyncHandler(async (req: Request, res: Res
     res.status(200).json({
         success: true,
         message: 'All notifications deleted',
+    });
+});
+
+// ==================== VENDOR NOTIFICATION ENDPOINTS ====================
+
+interface VendorNotification {
+    id: string;
+    type: 'appointment' | 'review';
+    title: string;
+    message: string;
+    timestamp: string;
+    data?: Record<string, any>;
+}
+
+/**
+ * Get notifications/activity for a vendor
+ * GET /api/v1/admin/notifications/vendor
+ * Returns recent appointments and reviews as notifications
+ */
+export const getVendorNotifications = asyncHandler(async (req: Request, res: Response) => {
+    const { page = 1, limit = 20 } = req.query;
+
+    // Check if user is a vendor
+    if (!req.user || req.user.role !== 'vendor') {
+        return res.status(403).json({
+            success: false,
+            message: 'Access denied. Vendor only.',
+        });
+    }
+
+    // Find the vendor associated with this user
+    const vendor = await Vendor.findOne({ userId: req.user._id });
+    if (!vendor) {
+        return res.status(404).json({
+            success: false,
+            message: 'Vendor profile not found',
+        });
+    }
+
+    // Get vendor's service IDs
+    const vendorServices = await VendorService.find({ vendorId: vendor._id }).select('_id name');
+    const serviceIds = vendorServices.map(vs => vs._id);
+    const serviceMap = new Map(vendorServices.map(vs => [vs._id.toString(), vs.name]));
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+
+    // Get recent appointments for this vendor
+    const recentAppointments = await Appointment.find({
+        vendorServiceId: { $in: serviceIds }
+    })
+        .populate('customerId', 'firstName lastName email')
+        .populate('vendorServiceId', 'name')
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+
+    // Get recent reviews for this vendor
+    const recentReviews = await Review.find({
+        vendorId: vendor._id
+    })
+        .populate('customerId', 'firstName lastName')
+        .populate('vendorServiceId', 'name')
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .lean();
+
+    // Convert to notification format
+    const notifications: VendorNotification[] = [];
+
+    // Add appointment notifications
+    for (const apt of recentAppointments) {
+        const customer = apt.customerId as any;
+        const service = apt.vendorServiceId as any;
+        const customerName = customer?.firstName
+            ? `${customer.firstName} ${customer.lastName || ''}`.trim()
+            : customer?.email || 'Customer';
+        const serviceName = service?.name || 'Service';
+
+        let title = '';
+        let message = '';
+
+        switch (apt.status) {
+            case 'pending':
+                title = 'New Appointment Request';
+                message = `${customerName} requested an appointment for ${serviceName}`;
+                break;
+            case 'confirmed':
+                title = 'Appointment Confirmed';
+                message = `Appointment with ${customerName} for ${serviceName} is confirmed`;
+                break;
+            case 'completed':
+                title = 'Appointment Completed';
+                message = `Appointment with ${customerName} for ${serviceName} has been completed`;
+                break;
+            case 'cancelled':
+                title = 'Appointment Cancelled';
+                message = `${customerName} cancelled their appointment for ${serviceName}`;
+                break;
+            default:
+                title = 'Appointment Update';
+                message = `Appointment status: ${apt.status}`;
+        }
+
+        notifications.push({
+            id: apt._id.toString(),
+            type: 'appointment',
+            title,
+            message,
+            timestamp: (apt.createdAt as Date).toISOString(),
+            data: {
+                appointmentId: apt._id.toString(),
+                status: apt.status,
+                appointmentDate: apt.appointmentDate,
+                startTime: apt.startTime,
+            },
+        });
+    }
+
+    // Add review notifications
+    for (const review of recentReviews) {
+        const customer = review.customerId as any;
+        const service = review.vendorServiceId as any;
+        const customerName = customer?.firstName
+            ? `${customer.firstName} ${customer.lastName || ''}`.trim()
+            : 'Customer';
+        const serviceName = service?.name || 'Service';
+
+        notifications.push({
+            id: review._id.toString(),
+            type: 'review',
+            title: 'New Review',
+            message: `${customerName} left a ${review.rating}-star review for ${serviceName}`,
+            timestamp: (review.createdAt as Date).toISOString(),
+            data: {
+                reviewId: review._id.toString(),
+                rating: review.rating,
+                comment: review.comment,
+            },
+        });
+    }
+
+    // Sort all notifications by timestamp descending
+    notifications.sort((a, b) =>
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    // Apply pagination
+    const skip = (pageNum - 1) * limitNum;
+    const paginatedNotifications = notifications.slice(skip, skip + limitNum);
+    const total = notifications.length;
+
+    res.status(200).json({
+        success: true,
+        data: paginatedNotifications,
+        pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+        },
     });
 });
