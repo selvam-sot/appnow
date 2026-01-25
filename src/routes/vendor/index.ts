@@ -9,13 +9,22 @@ import {
     declineAppointment,
     completeAppointment,
     getVendorServices,
+    getVendorServiceById,
+    createVendorService,
+    updateVendorService,
+    deleteVendorService,
     toggleServiceStatus,
+    getServiceSlots,
+    createServiceSlot,
+    updateServiceSlot,
+    deleteServiceSlot,
     getEarnings,
     getTransactions,
     getProfile,
     updateProfile,
     getReviews,
-    replyToReview
+    replyToReview,
+    getCategories
 } from '../../controllers/vendor-portal.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
 
@@ -42,11 +51,33 @@ router.post('/appointments/:id/decline', [
 ], declineAppointment);
 router.post('/appointments/:id/complete', completeAppointment);
 
-// Services
+// Categories (for service creation)
+router.get('/categories', getCategories);
+
+// Services - CRUD
 router.get('/services', getVendorServices);
+router.get('/services/:id', getVendorServiceById);
+router.post('/services', [
+    body('name').notEmpty().withMessage('Service name is required'),
+    body('categoryId').notEmpty().withMessage('Category is required'),
+    body('price').isNumeric().withMessage('Price must be a number'),
+    body('duration').isNumeric().withMessage('Duration must be a number')
+], createVendorService);
+router.put('/services/:id', updateVendorService);
+router.delete('/services/:id', deleteVendorService);
 router.patch('/services/:id/status', [
     body('isActive').isBoolean()
 ], toggleServiceStatus);
+
+// Slots - CRUD for each service
+router.get('/services/:serviceId/slots', getServiceSlots);
+router.post('/services/:serviceId/slots', [
+    body('date').notEmpty().withMessage('Date is required'),
+    body('fromTime').notEmpty().withMessage('Start time is required'),
+    body('toTime').notEmpty().withMessage('End time is required')
+], createServiceSlot);
+router.put('/services/:serviceId/slots/:slotId', updateServiceSlot);
+router.delete('/services/:serviceId/slots/:slotId', deleteServiceSlot);
 
 // Earnings
 router.get('/earnings', getEarnings);

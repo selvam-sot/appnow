@@ -3,9 +3,13 @@ import { asyncHandler } from '../utils/asyncHandler.util';
 import { AppError } from '../utils/appError.util';
 import Vendor from '../models/vendor.model';
 import VendorService from '../models/vendor-service.model';
+import VendorServiceSlot from '../models/vendor-service-slot.model';
 import Appointment from '../models/appointment.model';
 import User from '../models/user.model';
 import Review from '../models/review.model';
+import Category from '../models/category.model';
+import SubCategory from '../models/sub-category.model';
+import Service from '../models/service.model';
 
 /**
  * Sync vendor user from Clerk
@@ -716,5 +720,327 @@ export const replyToReview = asyncHandler(async (req: Request, res: Response) =>
     res.status(200).json({
         success: true,
         message: 'Reply added successfully'
+    });
+});
+
+/**
+ * Get categories for service creation
+ */
+export const getCategories = asyncHandler(async (req: Request, res: Response) => {
+    const categories = await Category.find({ isActive: true }).lean();
+
+    res.status(200).json({
+        success: true,
+        data: categories.map(cat => ({
+            _id: cat._id,
+            name: cat.name,
+            description: cat.description
+        }))
+    });
+});
+
+/**
+ * Get a specific vendor service by ID
+ */
+export const getVendorServiceById = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const service = await VendorService.findOne({ _id: id, vendorId })
+        .populate('categoryId', 'name')
+        .populate('subCategoryId', 'name')
+        .populate('serviceId', 'name description')
+        .lean();
+
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        data: {
+            id: service._id,
+            name: service.name,
+            description: service.description,
+            category: service.categoryId,
+            subCategory: service.subCategoryId,
+            price: service.price,
+            duration: service.duration,
+            isActive: service.isActive,
+            images: service.images
+        }
+    });
+});
+
+/**
+ * Create a new vendor service
+ */
+export const createVendorService = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { name, description, categoryId, subCategoryId, serviceId, price, duration } = req.body;
+
+    // Find or create a default service if not provided
+    let actualServiceId = serviceId;
+    if (!actualServiceId) {
+        // Find first service in this category or create one
+        let service = await Service.findOne({ categoryId });
+        if (!service) {
+            service = await Service.create({
+                name: name,
+                categoryId,
+                subCategoryId: subCategoryId || categoryId,
+                isActive: true
+            });
+        }
+        actualServiceId = service._id;
+    }
+
+    // Get default subCategoryId if not provided
+    let actualSubCategoryId = subCategoryId;
+    if (!actualSubCategoryId) {
+        const subCat = await SubCategory.findOne({ categoryId });
+        actualSubCategoryId = subCat?._id || categoryId;
+    }
+
+    const vendorService = await VendorService.create({
+        vendorId,
+        name,
+        subTitle: name,
+        description: [{
+            title: 'Description',
+            type: 'text',
+            content: [description || '']
+        }],
+        shortDescriptionType: 'text',
+        shortDescription: [description || name],
+        categoryId,
+        subCategoryId: actualSubCategoryId,
+        serviceId: actualServiceId,
+        price: Number(price),
+        duration: Number(duration),
+        isActive: true
+    });
+
+    res.status(201).json({
+        success: true,
+        message: 'Service created successfully',
+        data: {
+            id: vendorService._id,
+            name: vendorService.name,
+            price: vendorService.price,
+            duration: vendorService.duration
+        }
+    });
+});
+
+/**
+ * Update a vendor service
+ */
+export const updateVendorService = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+    const updates = req.body;
+
+    const service = await VendorService.findOne({ _id: id, vendorId });
+
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    // Update allowed fields
+    if (updates.name) service.name = updates.name;
+    if (updates.description) {
+        service.description = [{
+            title: 'Description',
+            type: 'text',
+            content: [updates.description]
+        }];
+        service.shortDescription = [updates.description];
+    }
+    if (updates.price) service.price = Number(updates.price);
+    if (updates.duration) service.duration = Number(updates.duration);
+    if (updates.categoryId) service.categoryId = updates.categoryId;
+    if (typeof updates.isActive === 'boolean') service.isActive = updates.isActive;
+
+    await service.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Service updated successfully'
+    });
+});
+
+/**
+ * Delete a vendor service
+ */
+export const deleteVendorService = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const service = await VendorService.findOne({ _id: id, vendorId });
+
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    // Check if service has upcoming appointments
+    const hasAppointments = await Appointment.exists({
+        vendorServiceId: id,
+        status: { $in: ['pending', 'confirmed'] },
+        appointmentDate: { $gte: new Date() }
+    });
+
+    if (hasAppointments) {
+        throw new AppError('Cannot delete service with upcoming appointments', 400);
+    }
+
+    // Delete associated slots
+    await VendorServiceSlot.deleteMany({ vendorServiceId: id });
+
+    // Delete the service
+    await VendorService.findByIdAndDelete(id);
+
+    res.status(200).json({
+        success: true,
+        message: 'Service deleted successfully'
+    });
+});
+
+/**
+ * Get slots for a vendor service
+ */
+export const getServiceSlots = asyncHandler(async (req: Request, res: Response) => {
+    const { serviceId } = req.params;
+    const vendorId = req.vendorId;
+    const { date } = req.query;
+
+    // Verify service belongs to vendor
+    const service = await VendorService.findOne({ _id: serviceId, vendorId });
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    const query: any = { vendorServiceId: serviceId };
+    if (date) {
+        query.date = date;
+    }
+
+    const slots = await VendorServiceSlot.find(query)
+        .sort({ date: 1, fromTime: 1 })
+        .lean();
+
+    res.status(200).json({
+        success: true,
+        data: slots.map(slot => ({
+            _id: slot._id,
+            date: slot.date,
+            fromTime: slot.fromTime,
+            toTime: slot.toTime,
+            reoccurrence: slot.reoccurrence || 1,
+            isBooked: slot.isBooked || false
+        }))
+    });
+});
+
+/**
+ * Create a slot for a vendor service
+ */
+export const createServiceSlot = asyncHandler(async (req: Request, res: Response) => {
+    const { serviceId } = req.params;
+    const vendorId = req.vendorId;
+    const { date, fromTime, toTime, reoccurrence = 1 } = req.body;
+
+    // Verify service belongs to vendor
+    const service = await VendorService.findOne({ _id: serviceId, vendorId });
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    const slot = await VendorServiceSlot.create({
+        vendorServiceId: serviceId,
+        vendorId,
+        date,
+        fromTime,
+        toTime,
+        reoccurrence: Number(reoccurrence),
+        isBooked: false
+    });
+
+    res.status(201).json({
+        success: true,
+        message: 'Slot created successfully',
+        data: {
+            _id: slot._id,
+            date: slot.date,
+            fromTime: slot.fromTime,
+            toTime: slot.toTime,
+            reoccurrence: slot.reoccurrence
+        }
+    });
+});
+
+/**
+ * Update a slot
+ */
+export const updateServiceSlot = asyncHandler(async (req: Request, res: Response) => {
+    const { serviceId, slotId } = req.params;
+    const vendorId = req.vendorId;
+    const updates = req.body;
+
+    // Verify service belongs to vendor
+    const service = await VendorService.findOne({ _id: serviceId, vendorId });
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    const slot = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
+    if (!slot) {
+        throw new AppError('Slot not found', 404);
+    }
+
+    if (slot.isBooked) {
+        throw new AppError('Cannot update a booked slot', 400);
+    }
+
+    if (updates.date) slot.date = updates.date;
+    if (updates.fromTime) slot.fromTime = updates.fromTime;
+    if (updates.toTime) slot.toTime = updates.toTime;
+    if (updates.reoccurrence) slot.reoccurrence = Number(updates.reoccurrence);
+
+    await slot.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Slot updated successfully'
+    });
+});
+
+/**
+ * Delete a slot
+ */
+export const deleteServiceSlot = asyncHandler(async (req: Request, res: Response) => {
+    const { serviceId, slotId } = req.params;
+    const vendorId = req.vendorId;
+
+    // Verify service belongs to vendor
+    const service = await VendorService.findOne({ _id: serviceId, vendorId });
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    const slot = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
+    if (!slot) {
+        throw new AppError('Slot not found', 404);
+    }
+
+    if (slot.isBooked) {
+        throw new AppError('Cannot delete a booked slot', 400);
+    }
+
+    await VendorServiceSlot.findByIdAndDelete(slotId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Slot deleted successfully'
     });
 });
