@@ -54,8 +54,9 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
         });
     }
 
-    // Get vendor ID from vendor service
-    const vendorService = await VendorService.findById(appointment.vendorServiceId);
+    // Get vendor service - handle both populated and non-populated cases
+    const vendorServiceIdValue = (appointment.vendorServiceId as any)?._id || appointment.vendorServiceId;
+    const vendorService = await VendorService.findById(vendorServiceIdValue);
     if (!vendorService) {
         return res.status(404).json({
             success: false,
@@ -66,7 +67,7 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
     // Create the review
     const review = await Review.create({
         customerId,
-        vendorServiceId: appointment.vendorServiceId,
+        vendorServiceId: vendorServiceIdValue,
         appointmentId,
         vendorId: vendorService.vendorId,
         rating,

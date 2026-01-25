@@ -22,6 +22,9 @@ export interface IUser extends Document {
 
     // Push Notification
     expoPushToken?: string;
+
+    // Contact
+    phone?: string;
     
     // Methods
     correctPassword(candidatePassword: string, userPassword: string): Promise<boolean>;

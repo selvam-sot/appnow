@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, authorize } from '../../middlewares/auth.middleware';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
     getAuditLogs,
     getAuditLogById,
@@ -10,7 +10,7 @@ import {
 const router = express.Router();
 
 // All audit log routes require admin authentication
-router.use(protect, authorize('admin'));
+router.use(protectAdmin);
 
 /**
  * @swagger

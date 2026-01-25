@@ -1,11 +1,11 @@
 import express from 'express';
-import { protect, authorize } from '../../middlewares/auth.middleware';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import { clearCache, getCacheStats } from '../../middlewares/cache.middleware';
 
 const router = express.Router();
 
 // Cache management requires admin authentication
-router.use(protect, authorize('admin'));
+router.use(protectAdmin);
 
 /**
  * @swagger

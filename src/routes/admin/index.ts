@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { body } from 'express-validator';
 
 import userRoutes from './user.routes';
 import categoryRoutes from './category.routes';
@@ -18,8 +19,19 @@ import analyticsRoutes from './analytics.routes';
 import cacheRoutes from './cache.routes';
 import auditLogRoutes from './audit-log.routes';
 import reportsRoutes from './reports.routes';
+import { syncAdmin, getAdminProfile } from '../../controllers/admin-portal.controller';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 
 const router = Router();
+
+// Public routes - Admin sync (no authentication required for initial sync)
+router.post('/sync', [
+    body('clerkId').notEmpty().withMessage('Clerk ID is required'),
+    body('email').isEmail().withMessage('Valid email is required')
+], syncAdmin);
+
+// Protected route - Get admin profile
+router.get('/profile', protectAdmin, getAdminProfile);
 
 router.use('/reviews', reviewRoutes);
 router.use('/dashboard', dashboardRoutes);

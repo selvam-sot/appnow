@@ -1,4 +1,5 @@
 import express from 'express';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
     getAllLocks,
     forceReleaseLock,
@@ -8,8 +9,9 @@ import { sensitiveLimiter } from '../../middlewares/rateLimiter.middleware';
 
 const router = express.Router();
 
-// Apply rate limiting to sensitive operations
+// Apply rate limiting to sensitive operations and admin auth
 router.use(sensitiveLimiter);
+router.use(protectAdmin);
 
 // Get all active locks
 router.get('/locks', getAllLocks);

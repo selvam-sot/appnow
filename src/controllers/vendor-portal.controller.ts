@@ -51,11 +51,16 @@ export const syncVendor = asyncHandler(async (req: Request, res: Response) => {
         });
     }
 
-    // Find or create vendor profile
-    let vendor = await Vendor.findOne({ email: email });
+    // Find vendor profile by userId or email
+    let vendor = await Vendor.findOne({
+        $or: [
+            { userId: user._id },
+            { email: email }
+        ]
+    });
 
     if (!vendor) {
-        // Create vendor profile
+        // Create vendor profile linked to user
         vendor = await Vendor.create({
             vendorName: businessName || `${firstName || ''} ${lastName || ''}`.trim() || 'New Vendor',
             email: email,
@@ -66,12 +71,21 @@ export const syncVendor = asyncHandler(async (req: Request, res: Response) => {
             zip: '',
             address1: '',
             verificationStatus: 'pending',
-            isActive: true
+            isActive: true,
+            userId: user._id
         });
     } else {
-        // Update vendor if needed
+        // Update vendor - link to user if not already linked
+        let needsSave = false;
+        if (!(vendor as any).userId) {
+            (vendor as any).userId = user._id;
+            needsSave = true;
+        }
         if (businessName && vendor.vendorName !== businessName) {
             vendor.vendorName = businessName;
+            needsSave = true;
+        }
+        if (needsSave) {
             await vendor.save();
         }
     }

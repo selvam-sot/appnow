@@ -78,8 +78,13 @@ export const protectVendor = asyncHandler(async (req: Request, res: Response, ne
     }
 
     // Find the vendor profile associated with this user
-    // Vendors are linked by email
-    const vendor = await Vendor.findOne({ email: user.email });
+    // Prefer userId link, fallback to email matching
+    const vendor = await Vendor.findOne({
+        $or: [
+            { userId: user._id },
+            { email: user.email }
+        ]
+    });
 
     if (!vendor) {
         return next(new AppError('Vendor profile not found. Please complete your vendor registration.', 404));
@@ -128,7 +133,13 @@ export const optionalVendorAuth = asyncHandler(async (req: Request, res: Respons
             const user = await User.findOne({ clerkId, isActive: true, role: 'vendor' });
 
             if (user) {
-                const vendor = await Vendor.findOne({ email: user.email, isActive: true });
+                const vendor = await Vendor.findOne({
+                    $or: [
+                        { userId: user._id },
+                        { email: user.email }
+                    ],
+                    isActive: true
+                });
 
                 if (vendor) {
                     req.user = user;

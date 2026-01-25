@@ -30,5 +30,18 @@ export interface IAppointment {
     total: number;
     paymentMode: string;
     cardDetails: null | ICardDetails;
-    status: 'pending' | 'confirmed' | 'cancelled';
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    // Payment fields
+    paymentIntentId?: string;
+    paymentStatus?: 'pending' | 'completed' | 'refunded' | 'partially_refunded' | 'failed';
+    // Refund fields
+    refundId?: string;
+    refundStatus?: 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled';
+    refundAmount?: number;
+    // Cancellation fields
+    cancelledAt?: Date;
+    cancellationReason?: string;
+    // Timestamps
+    createdAt?: Date;
+    updatedAt?: Date;
 }

@@ -1,24 +1,26 @@
 import express from 'express';
-import { protect, authorize } from '../../middlewares/auth.middleware';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import * as categoryController from '../../controllers/category.controller';
 
 const router = express.Router();
 
 // All admin routes require authentication and admin role
+router.use(protectAdmin);
+
 router.route('/')
-  .get(protect, authorize('admin'), categoryController.getAllCategories)
-  .post(protect, authorize('admin'), categoryController.createCategory);
+  .get(categoryController.getAllCategories)
+  .post(categoryController.createCategory);
 
 router.route('/:id')
-  .get(protect, authorize('admin'), categoryController.getCategory)
-  .put(protect, authorize('admin'), categoryController.updateCategory)
-  .delete(protect, authorize('admin'), categoryController.deleteCategory);
+  .get(categoryController.getCategory)
+  .put(categoryController.updateCategory)
+  .delete(categoryController.deleteCategory);
 
 // Special routes for toggling states
 router.route('/:id/toggle-favorite')
-  .patch(protect, authorize('admin'), categoryController.toggleFavorite);
+  .patch(categoryController.toggleFavorite);
 
 router.route('/:id/toggle-active')
-  .patch(protect, authorize('admin'), categoryController.toggleActive);
+  .patch(categoryController.toggleActive);
 
 export default router;

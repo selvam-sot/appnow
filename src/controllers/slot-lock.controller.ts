@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import SlotLock, { ISlotLockDocument } from '../models/slot-lock.model';
 import Appointment from '../models/appointment.model';
-import { asyncHandler } from '../utils/asyncHandler';
+import { asyncHandler } from '../utils/asyncHandler.util';
 import mongoose from 'mongoose';
 
 // Lock duration in minutes

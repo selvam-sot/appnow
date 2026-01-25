@@ -439,7 +439,7 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
 
                 // Update appointment with refund info
                 appointment.refundId = refund.id;
-                appointment.refundStatus = refund.status;
+                appointment.refundStatus = (refund.status as 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled') || 'pending';
                 appointment.refundAmount = refund.amount ? refund.amount / 100 : appointment.total;
                 appointment.paymentStatus = 'refunded';
 

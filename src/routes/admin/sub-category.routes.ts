@@ -1,17 +1,19 @@
 import express from 'express';
-import { protect, authorize } from '../../middlewares/auth.middleware';
-import { createSubCategory, getSubCategories, getSubCategory, updateSubCategory, deleteSubCategory } from './../../controllers/sub-category.controller';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
+import { createSubCategory, getSubCategories, getSubCategory, updateSubCategory, deleteSubCategory } from '../../controllers/sub-category.controller';
 
 const router = express.Router();
 
 // All admin routes require authentication and admin role
+router.use(protectAdmin);
+
 router.route('/')
-    .get(protect, authorize('admin'), getSubCategories)
-    .post(protect, authorize('admin'), createSubCategory);
+    .get(getSubCategories)
+    .post(createSubCategory);
 
 router.route('/:id')
-    .get(protect, authorize('admin'), getSubCategory)
-    .put(protect, authorize('admin'), updateSubCategory)
-    .delete(protect, authorize('admin'), deleteSubCategory);
+    .get(getSubCategory)
+    .put(updateSubCategory)
+    .delete(deleteSubCategory);
 
 export default router;

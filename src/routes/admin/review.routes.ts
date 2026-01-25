@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, authorize } from '../../middlewares/auth.middleware';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
     getAllReviews,
     updateReviewStatus,
@@ -9,8 +9,10 @@ import {
 const router = express.Router();
 
 // All admin routes require authentication and admin role
-router.get('/', protect, authorize('admin'), getAllReviews);
-router.put('/:id/status', protect, authorize('admin'), updateReviewStatus);
-router.delete('/:id', protect, authorize('admin'), deleteReview);
+router.use(protectAdmin);
+
+router.get('/', getAllReviews);
+router.put('/:id/status', updateReviewStatus);
+router.delete('/:id', deleteReview);
 
 export default router;

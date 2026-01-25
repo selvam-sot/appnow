@@ -24,6 +24,13 @@ export interface IVendor {
     socialMediaLinks: [SocialMediaLink];
     isActive: boolean;
     isFreelancer: boolean;
+    // Verification and ratings
+    verificationStatus?: 'pending' | 'verified' | 'rejected';
+    rating?: number;
+    totalReviews?: number;
+    // Link to User record (for vendor login via Users table)
+    userId?: string;
+    // Timestamps
     createdAt: Date;
     updatedAt: Date;
     __v?: number;

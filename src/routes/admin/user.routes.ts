@@ -19,25 +19,25 @@ import {
     bulkActivateUsers,
     resetUserPassword
 } from '../../controllers/user.controller';
-import { protect, authorize } from './../../middlewares/auth.middleware';
-import { userValidationRules } from './../../utils/validation.util';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
+import { userValidationRules } from '../../utils/validation.util';
 import { authLimiter, registrationLimiter } from '../../middlewares/rateLimiter.middleware';
 
 const router = express.Router();
 
-// Public routes (for admin login) with rate limiting
+// Public routes (legacy local auth - kept for backwards compatibility)
 router.post('/signup', registrationLimiter, userValidationRules.create(), signupUser);
 router.post('/login', authLimiter, userValidationRules.login(), loginUser);
 router.get('/activate/:activationToken', activateUser);
 
-// Protected routes (require authentication)
-router.post('/logout', protect, logoutUser);
-router.get('/profile', protect, getUserProfile);
-router.put('/profile', protect, userValidationRules.update(), updateUserProfile);
+// Protected routes (require admin authentication via Clerk)
+router.post('/logout', protectAdmin, logoutUser);
+router.get('/profile', protectAdmin, getUserProfile);
+router.put('/profile', protectAdmin, userValidationRules.update(), updateUserProfile);
 
 // Admin-only routes
-router.delete('/account', protect, authorize('admin'), deleteUserAccount);
-router.get('/', protect, authorize('admin'), getUsers);
+router.delete('/account', protectAdmin, deleteUserAccount);
+router.get('/', protectAdmin, getUsers);
 
 /**
  * @swagger
@@ -78,7 +78,7 @@ router.get('/', protect, authorize('admin'), getUsers);
  *       200:
  *         description: Paginated user list
  */
-router.get('/search', protect, authorize('admin'), searchUsers);
+router.get('/search', protectAdmin, searchUsers);
 
 /**
  * @swagger
@@ -103,7 +103,7 @@ router.get('/search', protect, authorize('admin'), searchUsers);
  *       200:
  *         description: Users deactivated
  */
-router.post('/bulk/deactivate', protect, authorize('admin'), [
+router.post('/bulk/deactivate', protectAdmin, [
     body('userIds').isArray().withMessage('userIds must be an array')
 ], bulkDeactivateUsers);
 
@@ -116,7 +116,7 @@ router.post('/bulk/deactivate', protect, authorize('admin'), [
  *     security:
  *       - bearerAuth: []
  */
-router.post('/bulk/activate', protect, authorize('admin'), [
+router.post('/bulk/activate', protectAdmin, [
     body('userIds').isArray().withMessage('userIds must be an array')
 ], bulkActivateUsers);
 
@@ -129,7 +129,7 @@ router.post('/bulk/activate', protect, authorize('admin'), [
  *     security:
  *       - bearerAuth: []
  */
-router.get('/:id', protect, authorize('admin'), getUserById);
+router.get('/:id', protectAdmin, getUserById);
 
 /**
  * @swagger
@@ -140,7 +140,7 @@ router.get('/:id', protect, authorize('admin'), getUserById);
  *     security:
  *       - bearerAuth: []
  */
-router.put('/:id', protect, authorize('admin'), updateUserById);
+router.put('/:id', protectAdmin, updateUserById);
 
 /**
  * @swagger
@@ -151,7 +151,7 @@ router.put('/:id', protect, authorize('admin'), updateUserById);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/:id/deactivate', protect, authorize('admin'), deactivateUser);
+router.post('/:id/deactivate', protectAdmin, deactivateUser);
 
 /**
  * @swagger
@@ -162,7 +162,7 @@ router.post('/:id/deactivate', protect, authorize('admin'), deactivateUser);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/:id/reactivate', protect, authorize('admin'), reactivateUser);
+router.post('/:id/reactivate', protectAdmin, reactivateUser);
 
 /**
  * @swagger
@@ -173,7 +173,7 @@ router.post('/:id/reactivate', protect, authorize('admin'), reactivateUser);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/:id/reset-password', protect, authorize('admin'), [
+router.post('/:id/reset-password', protectAdmin, [
     body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
 ], resetUserPassword);
 
@@ -186,6 +186,6 @@ router.post('/:id/reset-password', protect, authorize('admin'), [
  *     security:
  *       - bearerAuth: []
  */
-router.delete('/:id', protect, authorize('admin'), deleteUserById);
+router.delete('/:id', protectAdmin, deleteUserById);
 
 export default router;

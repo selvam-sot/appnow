@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, authorize } from './../../middlewares/auth.middleware';
+import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
     createVendor,
     getVendors,
@@ -9,22 +9,23 @@ import {
     getVendorsByVerificationStatus,
     verifyVendor,
     getVerificationStats
-} from './../../controllers/vendor.controller';
+} from '../../controllers/vendor.controller';
 
 const router = express.Router();
 
 // All admin routes require authentication and admin role
+router.use(protectAdmin);
 
 // Verification routes (must be before /:id routes)
-router.get('/verification/list', protect, authorize('admin'), getVendorsByVerificationStatus);
-router.get('/verification/stats', protect, authorize('admin'), getVerificationStats);
-router.put('/verification/:id', protect, authorize('admin'), verifyVendor);
+router.get('/verification/list', getVendorsByVerificationStatus);
+router.get('/verification/stats', getVerificationStats);
+router.put('/verification/:id', verifyVendor);
 
 // Standard CRUD routes
-router.post('/', protect, authorize('admin'), createVendor);
-router.get('/', protect, authorize('admin'), getVendors);
-router.get('/:id', protect, authorize('admin'), getVendorById);
-router.put('/:id', protect, authorize('admin'), updateVendor);
-router.delete('/:id', protect, authorize('admin'), deleteVendor);
+router.post('/', createVendor);
+router.get('/', getVendors);
+router.get('/:id', getVendorById);
+router.put('/:id', updateVendor);
+router.delete('/:id', deleteVendor);
 
 export default router;

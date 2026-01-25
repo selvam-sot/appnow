@@ -111,10 +111,11 @@ export const cacheMiddleware = (options: CacheOptions = {}) => {
         userSpecific = false
     } = options;
 
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction): void => {
         // Only cache GET requests
         if (req.method !== 'GET') {
-            return next();
+            next();
+            return;
         }
 
         const cacheKey = userSpecific
@@ -125,7 +126,8 @@ export const cacheMiddleware = (options: CacheOptions = {}) => {
         const cachedResponse = cache.get(cacheKey);
         if (cachedResponse) {
             logger.debug(`Cache HIT: ${cacheKey}`);
-            return res.status(200).json(cachedResponse);
+            res.status(200).json(cachedResponse);
+            return;
         }
 
         logger.debug(`Cache MISS: ${cacheKey}`);

@@ -115,6 +115,18 @@ const VendorSchema: Schema = new Schema({
     },
     taxId: {
         type: String
+    },
+    // Reference to User record (for vendor login)
+    userId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        unique: true,
+        sparse: true
+    },
+    // Review stats
+    totalReviews: {
+        type: Number,
+        default: 0
     }
 }, {
     // Match the exact field names and structure from the database
@@ -142,6 +154,8 @@ VendorSchema.index({ verificationStatus: 1 });
 VendorSchema.index({ rating: -1 });
 // Compound index for verified active vendors
 VendorSchema.index({ verificationStatus: 1, isActive: 1 });
+// Index for user lookup (vendor login)
+VendorSchema.index({ userId: 1 });
 // Text index for search
 VendorSchema.index({ vendorName: 'text', serviceProviderName: 'text', tags: 'text' });
 
