@@ -5,6 +5,8 @@ import { asyncHandler } from '../utils/asyncHandler.util';
 import StripeService from '../services/stripe.service';
 import logger from '../config/logger';
 import Stripe from 'stripe';
+import SlotLock from '../models/slot-lock.model';
+import Appointment from '../models/appointment.model';
 
 export const createPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -151,12 +153,52 @@ export const handleWebhook = asyncHandler(async (req: Request, res: Response) =>
                 // Handle successful payment here - create booking, etc.
                 break;
             case 'payment_intent.succeeded':
-                const paymentIntent = event.data.object;
+                const paymentIntent = event.data.object as Stripe.PaymentIntent;
                 logger.info(`Payment for ${paymentIntent.amount} succeeded!`);
+
+                // Release slot lock upon successful payment
+                if (paymentIntent.id) {
+                    try {
+                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: paymentIntent.id });
+                        if (deletedLock) {
+                            logger.info(`Slot lock released for payment intent: ${paymentIntent.id}`);
+                        }
+                    } catch (lockError: any) {
+                        logger.error(`Error releasing slot lock: ${lockError.message}`);
+                    }
+                }
                 break;
             case 'payment_intent.payment_failed':
-                const failedPayment = event.data.object;
+                const failedPayment = event.data.object as Stripe.PaymentIntent;
                 logger.error(`Payment for ${failedPayment.amount} failed!`);
+
+                // Release slot lock on payment failure so another user can book
+                if (failedPayment.id) {
+                    try {
+                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: failedPayment.id });
+                        if (deletedLock) {
+                            logger.info(`Slot lock released after payment failure: ${failedPayment.id}`);
+                        }
+                    } catch (lockError: any) {
+                        logger.error(`Error releasing slot lock on failure: ${lockError.message}`);
+                    }
+                }
+                break;
+            case 'payment_intent.canceled':
+                const canceledPayment = event.data.object as Stripe.PaymentIntent;
+                logger.info(`Payment intent canceled: ${canceledPayment.id}`);
+
+                // Release slot lock on cancellation
+                if (canceledPayment.id) {
+                    try {
+                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: canceledPayment.id });
+                        if (deletedLock) {
+                            logger.info(`Slot lock released after payment cancellation: ${canceledPayment.id}`);
+                        }
+                    } catch (lockError: any) {
+                        logger.error(`Error releasing slot lock on cancellation: ${lockError.message}`);
+                    }
+                }
                 break;
             default:
                 logger.info(`Unhandled event type ${event.type}`);
@@ -313,6 +355,102 @@ export const createCheckoutSession = asyncHandler(async (req: Request, res: Resp
         res.status(500).json({
             success: false,
             message: 'Failed to create checkout session',
+            error: error.message
+        });
+    }
+});
+
+// Get payment history for a user
+export const getPaymentHistory = asyncHandler(async (req: Request, res: Response) => {
+    const userId = (req as any).auth?.userId;
+    const { page = 1, limit = 20, status } = req.query;
+
+    if (!userId) {
+        throw new AppError('User not authenticated', 401);
+    }
+
+    try {
+        // Find user by clerkId
+        const User = require('../models/user.model').default;
+        const user = await User.findOne({ clerkId: userId });
+
+        if (!user) {
+            throw new AppError('User not found', 404);
+        }
+
+        // Build query
+        const query: any = {
+            customerId: user._id,
+            paymentIntentId: { $exists: true, $ne: null }
+        };
+
+        // Filter by payment status if provided
+        if (status && ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'].includes(status as string)) {
+            query.paymentStatus = status;
+        }
+
+        const pageNum = parseInt(page as string, 10);
+        const limitNum = parseInt(limit as string, 10);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Get total count
+        const total = await Appointment.countDocuments(query);
+
+        // Get payment history with service details
+        const payments = await Appointment.find(query)
+            .populate({
+                path: 'vendorServiceId',
+                populate: [
+                    { path: 'vendorId', select: 'vendorName vendorLogo' },
+                    { path: 'serviceId', select: 'name' }
+                ]
+            })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean();
+
+        // Format response
+        const formattedPayments = payments.map((payment: any) => ({
+            id: payment._id,
+            paymentIntentId: payment.paymentIntentId,
+            amount: payment.total || payment.serviceFee,
+            serviceFee: payment.serviceFee,
+            discountAmount: payment.discountAmount || 0,
+            walletAmount: payment.walletAmount || 0,
+            paymentMode: payment.paymentMode,
+            paymentStatus: payment.paymentStatus,
+            refundId: payment.refundId,
+            refundStatus: payment.refundStatus,
+            refundAmount: payment.refundAmount,
+            appointmentDate: payment.appointmentDate,
+            startTime: payment.startTime,
+            endTime: payment.endTime,
+            status: payment.status,
+            serviceName: payment.vendorServiceId?.serviceId?.name || 'Unknown Service',
+            vendorName: payment.vendorServiceId?.vendorId?.vendorName || 'Unknown Vendor',
+            vendorLogo: payment.vendorServiceId?.vendorId?.vendorLogo,
+            createdAt: payment.createdAt,
+            updatedAt: payment.updatedAt
+        }));
+
+        res.status(200).json({
+            success: true,
+            data: {
+                payments: formattedPayments,
+                pagination: {
+                    total,
+                    page: pageNum,
+                    limit: limitNum,
+                    pages: Math.ceil(total / limitNum)
+                }
+            }
+        });
+    } catch (error: any) {
+        logger.error(`Error fetching payment history: ${error.message}`);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch payment history',
             error: error.message
         });
     }

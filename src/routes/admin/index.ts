@@ -12,10 +12,21 @@ import manageAppointmentRoutes from './manage-appointment.routes';
 import monthlyServiceRoutes from './monthly-service.routes';
 import dashboardRoutes from './dashboard.routes';
 import notificationRoutes from './notification.routes';
+import reviewRoutes from './review.routes';
+import slotLockRoutes from './slot-lock.routes';
+import analyticsRoutes from './analytics.routes';
+import cacheRoutes from './cache.routes';
+import auditLogRoutes from './audit-log.routes';
+import reportsRoutes from './reports.routes';
 
 const router = Router();
 
+router.use('/reviews', reviewRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/reports', reportsRoutes);
+router.use('/cache', cacheRoutes);
+router.use('/audit-logs', auditLogRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/sub-categories', subCategoryRoutes);
 router.use('/services', serviceRoutes);
@@ -27,5 +38,6 @@ router.use('/manage-appointments', manageAppointmentRoutes);
 router.use('/monthly-service', monthlyServiceRoutes);
 router.use('/users', userRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/slot-locks', slotLockRoutes);
 
 export default router;

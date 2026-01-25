@@ -33,8 +33,12 @@ const NotificationSchema: Schema = new Schema({
     timestamps: true,
 });
 
-// Compound index for efficient queries
+// Compound indexes for efficient queries
 NotificationSchema.index({ userId: 1, createdAt: -1 });
 NotificationSchema.index({ userId: 1, read: 1 });
+// Index for notification type filtering
+NotificationSchema.index({ type: 1 });
+// Compound index for user's unread notifications by type
+NotificationSchema.index({ userId: 1, type: 1, read: 1 });
 
 export default mongoose.model<INotification>('Notification', NotificationSchema);

@@ -121,7 +121,24 @@ const VendorServiceSchema: Schema = new Schema({
     versionKey: '__v' // This matches the field in your DB output
 });
 
+// Indexes for performance optimization
 VendorServiceSchema.index({ name: 1 });
 VendorServiceSchema.index({ serviceId: 1 });
+// Index for vendor's services lookup
+VendorServiceSchema.index({ vendorId: 1 });
+// Index for category browsing
+VendorServiceSchema.index({ categoryId: 1 });
+// Index for subcategory browsing
+VendorServiceSchema.index({ subCategoryId: 1 });
+// Index for active services filtering
+VendorServiceSchema.index({ isActive: 1 });
+// Compound index for category + subcategory + active
+VendorServiceSchema.index({ categoryId: 1, subCategoryId: 1, isActive: 1 });
+// Index for price range queries
+VendorServiceSchema.index({ price: 1 });
+// Index for service place filtering
+VendorServiceSchema.index({ servicePlace: 1 });
+// Text index for search
+VendorServiceSchema.index({ name: 'text', subTitle: 'text', tags: 'text' });
 
 export default mongoose.model<IVendorService & Document>('VendorService', VendorServiceSchema);

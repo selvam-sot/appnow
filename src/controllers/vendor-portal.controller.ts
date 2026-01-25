@@ -1,0 +1,706 @@
+import { Request, Response } from 'express';
+import { asyncHandler } from '../utils/asyncHandler.util';
+import { AppError } from '../utils/appError.util';
+import Vendor from '../models/vendor.model';
+import VendorService from '../models/vendor-service.model';
+import Appointment from '../models/appointment.model';
+import User from '../models/user.model';
+import Review from '../models/review.model';
+
+/**
+ * Sync vendor user from Clerk
+ * Creates or updates user and vendor records
+ */
+export const syncVendor = asyncHandler(async (req: Request, res: Response) => {
+    const { clerkId, email, firstName, lastName, businessName, phone } = req.body;
+
+    if (!clerkId || !email) {
+        throw new AppError('Clerk ID and email are required', 400);
+    }
+
+    // Find or create user
+    let user = await User.findOne({
+        $or: [
+            { clerkId: clerkId },
+            { email: email }
+        ]
+    });
+
+    if (user) {
+        // Update existing user
+        user.clerkId = clerkId;
+        user.authProvider = 'clerk';
+        user.email = email;
+        user.firstName = firstName || user.firstName;
+        user.lastName = lastName || user.lastName;
+        user.role = 'vendor';
+        user.isActive = true;
+        user.lastSyncedAt = new Date();
+        await user.save();
+    } else {
+        // Create new user with vendor role
+        user = await User.create({
+            clerkId,
+            email,
+            firstName: firstName || '',
+            lastName: lastName || '',
+            authProvider: 'clerk',
+            role: 'vendor',
+            isActive: true,
+            lastSyncedAt: new Date()
+        });
+    }
+
+    // Find or create vendor profile
+    let vendor = await Vendor.findOne({ email: email });
+
+    if (!vendor) {
+        // Create vendor profile
+        vendor = await Vendor.create({
+            vendorName: businessName || `${firstName || ''} ${lastName || ''}`.trim() || 'New Vendor',
+            email: email,
+            phone: phone || '',
+            country: 'USA',
+            state: '',
+            city: '',
+            zip: '',
+            address1: '',
+            verificationStatus: 'pending',
+            isActive: true
+        });
+    } else {
+        // Update vendor if needed
+        if (businessName && vendor.vendorName !== businessName) {
+            vendor.vendorName = businessName;
+            await vendor.save();
+        }
+    }
+
+    res.status(200).json({
+        success: true,
+        data: {
+            id: user._id,
+            clerkId: user.clerkId,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
+            vendorId: vendor._id,
+            businessName: vendor.vendorName,
+            isVerified: vendor.verificationStatus === 'verified',
+            verificationStatus: vendor.verificationStatus,
+            rating: vendor.rating || 0,
+            reviewCount: 0
+        }
+    });
+});
+
+/**
+ * Get vendor dashboard stats
+ */
+export const getDashboardStats = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    // Get vendor services
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id);
+
+    // Get stats in parallel
+    const [
+        todayAppointments,
+        pendingAppointments,
+        monthlyAppointments,
+        monthlyRevenue,
+        totalCustomers,
+        avgRating
+    ] = await Promise.all([
+        // Today's appointments
+        Appointment.countDocuments({
+            vendorServiceId: { $in: serviceIds },
+            appointmentDate: { $gte: today, $lt: tomorrow }
+        }),
+        // Pending appointments
+        Appointment.countDocuments({
+            vendorServiceId: { $in: serviceIds },
+            status: 'pending'
+        }),
+        // This month appointments
+        Appointment.countDocuments({
+            vendorServiceId: { $in: serviceIds },
+            appointmentDate: { $gte: thisMonthStart }
+        }),
+        // Monthly revenue
+        Appointment.aggregate([
+            {
+                $match: {
+                    vendorServiceId: { $in: serviceIds },
+                    createdAt: { $gte: thisMonthStart },
+                    paymentStatus: 'completed'
+                }
+            },
+            {
+                $group: {
+                    _id: null,
+                    total: { $sum: { $ifNull: ['$total', '$serviceFee'] } }
+                }
+            }
+        ]),
+        // Unique customers
+        Appointment.distinct('customerId', {
+            vendorServiceId: { $in: serviceIds }
+        }).then(ids => ids.length),
+        // Average rating
+        Review.aggregate([
+            { $match: { vendorId } },
+            { $group: { _id: null, avgRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+        ])
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            todayBookings: todayAppointments,
+            pendingBookings: pendingAppointments,
+            monthlyBookings: monthlyAppointments,
+            monthlyRevenue: monthlyRevenue[0]?.total || 0,
+            totalCustomers,
+            rating: avgRating[0]?.avgRating?.toFixed(1) || 0,
+            reviewCount: avgRating[0]?.count || 0
+        }
+    });
+});
+
+/**
+ * Get today's appointments for vendor
+ */
+export const getTodayAppointments = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id);
+
+    const appointments = await Appointment.find({
+        vendorServiceId: { $in: serviceIds },
+        appointmentDate: { $gte: today, $lt: tomorrow }
+    })
+        .populate('customerId', 'firstName lastName email phone')
+        .populate({
+            path: 'vendorServiceId',
+            populate: { path: 'serviceId', select: 'name' }
+        })
+        .sort({ startTime: 1 })
+        .lean();
+
+    res.status(200).json({
+        success: true,
+        data: appointments.map(apt => ({
+            id: apt._id,
+            customerName: `${(apt.customerId as any)?.firstName || ''} ${(apt.customerId as any)?.lastName || ''}`.trim(),
+            customerPhone: (apt.customerId as any)?.phone,
+            customerEmail: (apt.customerId as any)?.email,
+            serviceName: (apt.vendorServiceId as any)?.serviceId?.name || 'Service',
+            date: apt.appointmentDate,
+            time: apt.startTime,
+            endTime: apt.endTime,
+            status: apt.status,
+            price: apt.total || apt.serviceFee,
+            paymentStatus: apt.paymentStatus
+        }))
+    });
+});
+
+/**
+ * Get vendor appointments with filters
+ */
+export const getAppointments = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { status, page = 1, limit = 20, startDate, endDate } = req.query;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id);
+
+    const query: any = { vendorServiceId: { $in: serviceIds } };
+
+    if (status && status !== 'all') {
+        query.status = status;
+    }
+
+    if (startDate || endDate) {
+        query.appointmentDate = {};
+        if (startDate) query.appointmentDate.$gte = new Date(startDate as string);
+        if (endDate) query.appointmentDate.$lte = new Date(endDate as string);
+    }
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [appointments, total] = await Promise.all([
+        Appointment.find(query)
+            .populate('customerId', 'firstName lastName email phone')
+            .populate({
+                path: 'vendorServiceId',
+                populate: { path: 'serviceId', select: 'name' }
+            })
+            .sort({ appointmentDate: -1, startTime: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        Appointment.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            appointments: appointments.map(apt => ({
+                id: apt._id,
+                customerName: `${(apt.customerId as any)?.firstName || ''} ${(apt.customerId as any)?.lastName || ''}`.trim(),
+                customerPhone: (apt.customerId as any)?.phone,
+                customerEmail: (apt.customerId as any)?.email,
+                serviceName: (apt.vendorServiceId as any)?.serviceId?.name || 'Service',
+                date: apt.appointmentDate,
+                time: apt.startTime,
+                endTime: apt.endTime,
+                duration: `${Math.round(((new Date(`1970-01-01T${apt.endTime}`).getTime() - new Date(`1970-01-01T${apt.startTime}`).getTime()) / 60000))} min`,
+                status: apt.status,
+                price: apt.total || apt.serviceFee,
+                paymentStatus: apt.paymentStatus,
+                servicePlace: apt.servicePlace,
+                customerNotes: apt.customerNotes,
+                createdAt: apt.createdAt
+            })),
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(total / limitNum)
+            }
+        }
+    });
+});
+
+/**
+ * Confirm appointment
+ */
+export const confirmAppointment = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    if (!serviceIds.includes(appointment.vendorServiceId.toString())) {
+        throw new AppError('Not authorized to access this appointment', 403);
+    }
+
+    if (appointment.status !== 'pending') {
+        throw new AppError('Only pending appointments can be confirmed', 400);
+    }
+
+    appointment.status = 'confirmed';
+    await appointment.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Appointment confirmed successfully'
+    });
+});
+
+/**
+ * Decline appointment
+ */
+export const declineAppointment = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const vendorId = req.vendorId;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    if (!serviceIds.includes(appointment.vendorServiceId.toString())) {
+        throw new AppError('Not authorized to access this appointment', 403);
+    }
+
+    if (appointment.status !== 'pending') {
+        throw new AppError('Only pending appointments can be declined', 400);
+    }
+
+    appointment.status = 'cancelled';
+    appointment.cancellationReason = reason || 'Declined by vendor';
+    appointment.cancelledAt = new Date();
+    await appointment.save();
+
+    // TODO: Initiate refund if payment was completed
+
+    res.status(200).json({
+        success: true,
+        message: 'Appointment declined successfully'
+    });
+});
+
+/**
+ * Complete appointment
+ */
+export const completeAppointment = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    if (!serviceIds.includes(appointment.vendorServiceId.toString())) {
+        throw new AppError('Not authorized to access this appointment', 403);
+    }
+
+    if (appointment.status !== 'confirmed') {
+        throw new AppError('Only confirmed appointments can be marked as completed', 400);
+    }
+
+    appointment.status = 'completed';
+    await appointment.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Appointment marked as completed'
+    });
+});
+
+/**
+ * Get vendor services
+ */
+export const getVendorServices = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+
+    const services = await VendorService.find({ vendorId })
+        .populate('serviceId', 'name description')
+        .populate('categoryId', 'name')
+        .lean();
+
+    // Get booking counts for each service
+    const serviceIds = services.map(s => s._id);
+    const thisMonth = new Date();
+    thisMonth.setDate(1);
+    thisMonth.setHours(0, 0, 0, 0);
+
+    const bookingCounts = await Appointment.aggregate([
+        {
+            $match: {
+                vendorServiceId: { $in: serviceIds },
+                createdAt: { $gte: thisMonth }
+            }
+        },
+        {
+            $group: {
+                _id: '$vendorServiceId',
+                count: { $sum: 1 }
+            }
+        }
+    ]);
+
+    const countMap = new Map(bookingCounts.map(b => [b._id.toString(), b.count]));
+
+    res.status(200).json({
+        success: true,
+        data: services.map(service => ({
+            id: service._id,
+            name: (service.serviceId as any)?.name || 'Service',
+            description: service.description || (service.serviceId as any)?.description,
+            categoryName: (service.categoryId as any)?.name,
+            price: service.price,
+            duration: service.duration,
+            isActive: service.isActive !== false,
+            images: service.images,
+            bookingsThisMonth: countMap.get(service._id.toString()) || 0
+        }))
+    });
+});
+
+/**
+ * Toggle service status
+ */
+export const toggleServiceStatus = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { isActive } = req.body;
+    const vendorId = req.vendorId;
+
+    const service = await VendorService.findOne({ _id: id, vendorId });
+
+    if (!service) {
+        throw new AppError('Service not found', 404);
+    }
+
+    service.isActive = isActive;
+    await service.save();
+
+    res.status(200).json({
+        success: true,
+        message: `Service ${isActive ? 'activated' : 'deactivated'} successfully`
+    });
+});
+
+/**
+ * Get vendor earnings
+ */
+export const getEarnings = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { period = 'month' } = req.query;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id);
+
+    // Calculate date range
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+        case 'week':
+            startDate = new Date(now);
+            startDate.setDate(now.getDate() - 7);
+            break;
+        case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+        default: // month
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const earnings = await Appointment.aggregate([
+        {
+            $match: {
+                vendorServiceId: { $in: serviceIds },
+                createdAt: { $gte: startDate },
+                paymentStatus: 'completed'
+            }
+        },
+        {
+            $group: {
+                _id: null,
+                totalRevenue: { $sum: { $ifNull: ['$total', '$serviceFee'] } },
+                bookingCount: { $sum: 1 },
+                avgOrderValue: { $avg: { $ifNull: ['$total', '$serviceFee'] } }
+            }
+        }
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            period,
+            totalRevenue: earnings[0]?.totalRevenue || 0,
+            bookingCount: earnings[0]?.bookingCount || 0,
+            avgOrderValue: Math.round((earnings[0]?.avgOrderValue || 0) * 100) / 100
+        }
+    });
+});
+
+/**
+ * Get vendor transactions
+ */
+export const getTransactions = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { page = 1, limit = 20 } = req.query;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id);
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [transactions, total] = await Promise.all([
+        Appointment.find({
+            vendorServiceId: { $in: serviceIds },
+            paymentIntentId: { $exists: true }
+        })
+            .populate('customerId', 'firstName lastName')
+            .populate({
+                path: 'vendorServiceId',
+                populate: { path: 'serviceId', select: 'name' }
+            })
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        Appointment.countDocuments({
+            vendorServiceId: { $in: serviceIds },
+            paymentIntentId: { $exists: true }
+        })
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            transactions: transactions.map(t => ({
+                id: t._id,
+                customerName: `${(t.customerId as any)?.firstName || ''} ${(t.customerId as any)?.lastName || ''}`.trim(),
+                serviceName: (t.vendorServiceId as any)?.serviceId?.name || 'Service',
+                amount: t.total || t.serviceFee,
+                status: t.paymentStatus,
+                refundAmount: t.refundAmount,
+                date: t.createdAt
+            })),
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(total / limitNum)
+            }
+        }
+    });
+});
+
+/**
+ * Get vendor profile
+ */
+export const getProfile = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+
+    const vendor = await Vendor.findById(vendorId).lean();
+
+    if (!vendor) {
+        throw new AppError('Vendor not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        data: vendor
+    });
+});
+
+/**
+ * Update vendor profile
+ */
+export const updateProfile = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const updates = req.body;
+
+    // Fields that can be updated
+    const allowedFields = [
+        'vendorName', 'vendorEmail', 'vendorPhone', 'vendorLogo',
+        'aboutContent', 'address1', 'address2', 'city', 'state', 'zip',
+        'website', 'socialLinks'
+    ];
+
+    const filteredUpdates: any = {};
+    for (const field of allowedFields) {
+        if (updates[field] !== undefined) {
+            filteredUpdates[field] = updates[field];
+        }
+    }
+
+    const vendor = await Vendor.findByIdAndUpdate(
+        vendorId,
+        filteredUpdates,
+        { new: true }
+    );
+
+    if (!vendor) {
+        throw new AppError('Vendor not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Profile updated successfully',
+        data: vendor
+    });
+});
+
+/**
+ * Get vendor reviews
+ */
+export const getReviews = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { page = 1, limit = 20 } = req.query;
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [reviews, total] = await Promise.all([
+        Review.find({ vendorId })
+            .populate('customerId', 'firstName lastName')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        Review.countDocuments({ vendorId })
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            reviews: reviews.map(r => ({
+                id: r._id,
+                customerName: `${(r.customerId as any)?.firstName || ''} ${(r.customerId as any)?.lastName || ''}`.trim(),
+                rating: r.rating,
+                title: r.title,
+                comment: r.comment,
+                reply: r.vendorResponse?.comment,
+                replyDate: r.vendorResponse?.respondedAt,
+                createdAt: r.createdAt
+            })),
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(total / limitNum)
+            }
+        }
+    });
+});
+
+/**
+ * Reply to review
+ */
+export const replyToReview = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reply } = req.body;
+    const vendorId = req.vendorId;
+
+    const review = await Review.findOne({ _id: id, vendorId });
+
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    review.vendorResponse = {
+        comment: reply,
+        respondedAt: new Date()
+    };
+    await review.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Reply added successfully'
+    });
+});

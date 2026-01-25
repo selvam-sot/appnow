@@ -47,3 +47,92 @@ export const deleteVendor = asyncHandler(async (req: Request, res: Response) => 
     }
     res.json({ message: 'Vendor deleted successfully' });
 });
+
+/**
+ * Get vendors by verification status
+ */
+export const getVendorsByVerificationStatus = asyncHandler(async (req: Request, res: Response) => {
+    const { status } = req.query;
+
+    const query: Record<string, unknown> = {};
+    if (status && status !== 'all') {
+        query.verificationStatus = status;
+    }
+
+    const vendors = await Vendor.find(query)
+        .populate('verifiedBy', 'firstName lastName email')
+        .sort({ createdAt: -1 });
+
+    res.status(200).json({
+        success: true,
+        data: vendors,
+        count: vendors.length
+    });
+});
+
+/**
+ * Verify a vendor (approve or reject)
+ */
+export const verifyVendor = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+    const adminId = (req as any).user?._id;
+
+    if (!['verified', 'rejected', 'pending'].includes(status)) {
+        throw new AppError('Invalid verification status', 400);
+    }
+
+    const updateData: Record<string, unknown> = {
+        verificationStatus: status,
+        verificationNotes: notes || ''
+    };
+
+    // Set verified info if approving
+    if (status === 'verified') {
+        updateData.verifiedAt = new Date();
+        updateData.verifiedBy = adminId;
+        updateData.isActive = true;
+    } else if (status === 'rejected') {
+        updateData.verifiedAt = new Date();
+        updateData.verifiedBy = adminId;
+        updateData.isActive = false;
+    }
+
+    const vendor = await Vendor.findByIdAndUpdate(
+        id,
+        updateData,
+        { new: true, runValidators: true }
+    ).populate('verifiedBy', 'firstName lastName email');
+
+    if (!vendor) {
+        throw new AppError('Vendor not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        message: `Vendor ${status === 'verified' ? 'approved' : status === 'rejected' ? 'rejected' : 'set to pending'}`,
+        data: vendor
+    });
+});
+
+/**
+ * Get verification stats
+ */
+export const getVerificationStats = asyncHandler(async (req: Request, res: Response) => {
+    const [pending, verified, rejected, total] = await Promise.all([
+        Vendor.countDocuments({ verificationStatus: 'pending' }),
+        Vendor.countDocuments({ verificationStatus: 'verified' }),
+        Vendor.countDocuments({ verificationStatus: 'rejected' }),
+        Vendor.countDocuments()
+    ]);
+
+    res.status(200).json({
+        success: true,
+        data: {
+            pending,
+            verified,
+            rejected,
+            total
+        }
+    });
+});

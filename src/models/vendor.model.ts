@@ -92,8 +92,31 @@ const VendorSchema: Schema = new Schema({
     isFreelancer: {
         type: Boolean,
         default: false
+    },
+    // Verification fields
+    verificationStatus: {
+        type: String,
+        enum: ['pending', 'verified', 'rejected'],
+        default: 'pending'
+    },
+    verificationNotes: {
+        type: String
+    },
+    verifiedAt: {
+        type: Date
+    },
+    verifiedBy: {
+        type: Schema.Types.ObjectId,
+        ref: 'User'
+    },
+    // Business documents
+    businessLicense: {
+        type: String
+    },
+    taxId: {
+        type: String
     }
-}, { 
+}, {
     // Match the exact field names and structure from the database
     timestamps: {
         createdAt: 'createdAt',
@@ -101,5 +124,25 @@ const VendorSchema: Schema = new Schema({
     },
     versionKey: '__v' // This matches the field in your DB output
 });
+
+// Indexes for performance optimization
+// Index for vendor name search
+VendorSchema.index({ vendorName: 1 });
+// Index for location-based queries
+VendorSchema.index({ city: 1 });
+VendorSchema.index({ state: 1 });
+VendorSchema.index({ country: 1 });
+// Compound index for location search
+VendorSchema.index({ country: 1, state: 1, city: 1 });
+// Index for active vendors
+VendorSchema.index({ isActive: 1 });
+// Index for verification status
+VendorSchema.index({ verificationStatus: 1 });
+// Index for rating-based sorting
+VendorSchema.index({ rating: -1 });
+// Compound index for verified active vendors
+VendorSchema.index({ verificationStatus: 1, isActive: 1 });
+// Text index for search
+VendorSchema.index({ vendorName: 'text', serviceProviderName: 'text', tags: 'text' });
 
 export default mongoose.model<IVendor & Document>('Vendor', VendorSchema);

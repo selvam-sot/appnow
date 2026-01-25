@@ -8,10 +8,21 @@ import {
     refundPayment,
     confirmWithMethod,
     confirmWithCard,
-    createCheckoutSession
+    createCheckoutSession,
+    getPaymentHistory
 } from '../../controllers/payment.controller';
+import { paymentLimiter } from '../../middlewares/rateLimiter.middleware';
 
 const router = express.Router();
+
+// Apply payment rate limiter to all payment routes except webhook
+router.use((req, res, next) => {
+    // Skip rate limiting for webhook endpoint
+    if (req.path === '/webhook') {
+        return next();
+    }
+    return paymentLimiter(req, res, next);
+});
 
 // Create payment intent
 router.post('/create-payment-intent', [
@@ -61,5 +72,8 @@ router.post('/create-checkout-session', [
     body('successUrl').isURL().withMessage('Success URL must be valid'),
     body('cancelUrl').isURL().withMessage('Cancel URL must be valid'),
 ], createCheckoutSession);
+
+// Get payment history
+router.get('/history', getPaymentHistory);
 
 export default router;

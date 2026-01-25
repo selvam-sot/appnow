@@ -128,4 +128,18 @@ UserSchema.methods.incrementTokenVersion = async function(): Promise<void> {
     await this.save();
 };
 
+// Additional indexes for performance optimization
+// Index for role-based queries
+UserSchema.index({ role: 1 });
+// Index for active status filtering
+UserSchema.index({ isActive: 1 });
+// Compound index for admin user listing
+UserSchema.index({ role: 1, createdAt: -1 });
+// Index for push notification queries
+UserSchema.index({ expoPushToken: 1 }, { sparse: true });
+// Index for activation token lookup
+UserSchema.index({ activationToken: 1 }, { sparse: true });
+// Index for auth provider filtering
+UserSchema.index({ authProvider: 1 });
+
 export default mongoose.model<IUser>('User', UserSchema);

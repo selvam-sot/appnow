@@ -88,12 +88,37 @@ const AppointmentSchema: Schema = new Schema({
     cardDetails: {
         type: CardDetailsSchema
     },
-    status: { 
-        type: String, 
-        enum: ['pending', 'confirmed', 'cancelled'], 
+    status: {
+        type: String,
+        enum: ['pending', 'confirmed', 'cancelled', 'completed'],
         default: 'pending'
+    },
+    paymentIntentId: {
+        type: String
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'],
+        default: 'pending'
+    },
+    // Refund fields
+    refundId: {
+        type: String
+    },
+    refundStatus: {
+        type: String,
+        enum: ['pending', 'processing', 'succeeded', 'failed', 'cancelled'],
+    },
+    refundAmount: {
+        type: Number
+    },
+    cancelledAt: {
+        type: Date
+    },
+    cancellationReason: {
+        type: String
     }
-}, { 
+}, {
     // Match the exact field names and structure from the database
     timestamps: {
         createdAt: 'createdAt',
@@ -101,5 +126,23 @@ const AppointmentSchema: Schema = new Schema({
     },
     versionKey: '__v' // This matches the field in your DB output
 });
+
+// Indexes for performance optimization
+// Index for customer appointments lookup
+AppointmentSchema.index({ customerId: 1, appointmentDate: -1 });
+// Index for vendor service appointments
+AppointmentSchema.index({ vendorServiceId: 1, appointmentDate: -1 });
+// Index for status filtering
+AppointmentSchema.index({ status: 1 });
+// Index for date range queries
+AppointmentSchema.index({ appointmentDate: 1 });
+// Compound index for slot availability check
+AppointmentSchema.index({ vendorServiceId: 1, appointmentDate: 1, startTime: 1, endTime: 1 });
+// Index for payment status filtering
+AppointmentSchema.index({ paymentStatus: 1 });
+// Index for payment intent lookup (Stripe webhooks)
+AppointmentSchema.index({ paymentIntentId: 1 });
+// Index for created date (dashboard analytics)
+AppointmentSchema.index({ createdAt: -1 });
 
 export default mongoose.model<IAppointment & Document>('Appointment', AppointmentSchema);
