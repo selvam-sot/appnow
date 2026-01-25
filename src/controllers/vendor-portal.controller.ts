@@ -733,7 +733,7 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
         success: true,
         data: categories.map(cat => ({
             _id: cat._id,
-            name: cat.name,
+            name: (cat as any).name || cat.categoryName,
             description: cat.description
         }))
     });
@@ -912,7 +912,7 @@ export const deleteVendorService = asyncHandler(async (req: Request, res: Respon
 export const getServiceSlots = asyncHandler(async (req: Request, res: Response) => {
     const { serviceId } = req.params;
     const vendorId = req.vendorId;
-    const { date } = req.query;
+    const { month, year } = req.query;
 
     // Verify service belongs to vendor
     const service = await VendorService.findOne({ _id: serviceId, vendorId });
@@ -921,24 +921,35 @@ export const getServiceSlots = asyncHandler(async (req: Request, res: Response) 
     }
 
     const query: any = { vendorServiceId: serviceId };
-    if (date) {
-        query.date = date;
+    if (month && year) {
+        query.month = Number(month);
+        query.year = Number(year);
     }
 
-    const slots = await VendorServiceSlot.find(query)
-        .sort({ date: 1, fromTime: 1 })
+    const slotDocs = await VendorServiceSlot.find(query)
+        .sort({ year: 1, month: 1 })
         .lean();
+
+    // Flatten the nested structure for easier frontend consumption
+    const slots: any[] = [];
+    for (const doc of slotDocs) {
+        for (const dateEntry of doc.dates || []) {
+            for (const timing of dateEntry.timings || []) {
+                slots.push({
+                    _id: `${doc._id}-${dateEntry.date}-${timing.fromTime}`,
+                    slotDocId: doc._id,
+                    date: dateEntry.date,
+                    fromTime: timing.fromTime,
+                    toTime: timing.toTime,
+                    reoccurrence: timing.reoccurrence || dateEntry.reoccurrence || 1
+                });
+            }
+        }
+    }
 
     res.status(200).json({
         success: true,
-        data: slots.map(slot => ({
-            _id: slot._id,
-            date: slot.date,
-            fromTime: slot.fromTime,
-            toTime: slot.toTime,
-            reoccurrence: slot.reoccurrence || 1,
-            isBooked: slot.isBooked || false
-        }))
+        data: slots
     });
 });
 
@@ -956,25 +967,64 @@ export const createServiceSlot = asyncHandler(async (req: Request, res: Response
         throw new AppError('Service not found', 404);
     }
 
-    const slot = await VendorServiceSlot.create({
+    const slotDate = new Date(date);
+    const month = slotDate.getMonth() + 1; // 1-12
+    const year = slotDate.getFullYear();
+
+    // Find existing slot document for this month/year or create new one
+    let slotDoc = await VendorServiceSlot.findOne({
         vendorServiceId: serviceId,
-        vendorId,
-        date,
+        month,
+        year
+    });
+
+    const newTiming = {
         fromTime,
         toTime,
+        reoccurrence: Number(reoccurrence)
+    };
+
+    const newDateEntry = {
+        date: slotDate,
         reoccurrence: Number(reoccurrence),
-        isBooked: false
-    });
+        timingType: 'custom',
+        timings: [newTiming]
+    };
+
+    if (slotDoc) {
+        // Check if date already exists
+        const existingDateIdx = slotDoc.dates.findIndex(
+            (d: any) => new Date(d.date).toDateString() === slotDate.toDateString()
+        );
+
+        if (existingDateIdx >= 0) {
+            // Add timing to existing date
+            (slotDoc.dates[existingDateIdx] as any).timings.push(newTiming);
+        } else {
+            // Add new date entry
+            slotDoc.dates.push(newDateEntry as any);
+        }
+        await slotDoc.save();
+    } else {
+        // Create new slot document
+        slotDoc = await VendorServiceSlot.create({
+            vendorServiceId: serviceId,
+            month,
+            year,
+            reoccurrence: Number(reoccurrence),
+            dates: [newDateEntry]
+        });
+    }
 
     res.status(201).json({
         success: true,
         message: 'Slot created successfully',
         data: {
-            _id: slot._id,
-            date: slot.date,
-            fromTime: slot.fromTime,
-            toTime: slot.toTime,
-            reoccurrence: slot.reoccurrence
+            _id: slotDoc._id,
+            date: slotDate,
+            fromTime,
+            toTime,
+            reoccurrence: Number(reoccurrence)
         }
     });
 });
@@ -985,7 +1035,7 @@ export const createServiceSlot = asyncHandler(async (req: Request, res: Response
 export const updateServiceSlot = asyncHandler(async (req: Request, res: Response) => {
     const { serviceId, slotId } = req.params;
     const vendorId = req.vendorId;
-    const updates = req.body;
+    const { date, fromTime, toTime, oldFromTime, reoccurrence } = req.body;
 
     // Verify service belongs to vendor
     const service = await VendorService.findOne({ _id: serviceId, vendorId });
@@ -993,21 +1043,37 @@ export const updateServiceSlot = asyncHandler(async (req: Request, res: Response
         throw new AppError('Service not found', 404);
     }
 
-    const slot = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
-    if (!slot) {
+    // slotId is the document ID, we need to find the specific timing within it
+    const slotDoc = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
+    if (!slotDoc) {
         throw new AppError('Slot not found', 404);
     }
 
-    if (slot.isBooked) {
-        throw new AppError('Cannot update a booked slot', 400);
+    // Find the date entry and timing to update
+    const targetDate = new Date(date);
+    const dateEntryIdx = slotDoc.dates.findIndex(
+        (d: any) => new Date(d.date).toDateString() === targetDate.toDateString()
+    );
+
+    if (dateEntryIdx === -1) {
+        throw new AppError('Date entry not found in slot', 404);
     }
 
-    if (updates.date) slot.date = updates.date;
-    if (updates.fromTime) slot.fromTime = updates.fromTime;
-    if (updates.toTime) slot.toTime = updates.toTime;
-    if (updates.reoccurrence) slot.reoccurrence = Number(updates.reoccurrence);
+    const dateEntry = slotDoc.dates[dateEntryIdx] as any;
+    const timingIdx = dateEntry.timings.findIndex(
+        (t: any) => t.fromTime === (oldFromTime || fromTime)
+    );
 
-    await slot.save();
+    if (timingIdx === -1) {
+        throw new AppError('Timing not found', 404);
+    }
+
+    // Update the timing
+    if (fromTime) dateEntry.timings[timingIdx].fromTime = fromTime;
+    if (toTime) dateEntry.timings[timingIdx].toTime = toTime;
+    if (reoccurrence) dateEntry.timings[timingIdx].reoccurrence = Number(reoccurrence);
+
+    await slotDoc.save();
 
     res.status(200).json({
         success: true,
@@ -1021,6 +1087,7 @@ export const updateServiceSlot = asyncHandler(async (req: Request, res: Response
 export const deleteServiceSlot = asyncHandler(async (req: Request, res: Response) => {
     const { serviceId, slotId } = req.params;
     const vendorId = req.vendorId;
+    const { date, fromTime } = req.body;
 
     // Verify service belongs to vendor
     const service = await VendorService.findOne({ _id: serviceId, vendorId });
@@ -1028,16 +1095,38 @@ export const deleteServiceSlot = asyncHandler(async (req: Request, res: Response
         throw new AppError('Service not found', 404);
     }
 
-    const slot = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
-    if (!slot) {
+    const slotDoc = await VendorServiceSlot.findOne({ _id: slotId, vendorServiceId: serviceId });
+    if (!slotDoc) {
         throw new AppError('Slot not found', 404);
     }
 
-    if (slot.isBooked) {
-        throw new AppError('Cannot delete a booked slot', 400);
-    }
+    if (date && fromTime) {
+        // Delete specific timing from specific date
+        const targetDate = new Date(date);
+        const dateEntryIdx = slotDoc.dates.findIndex(
+            (d: any) => new Date(d.date).toDateString() === targetDate.toDateString()
+        );
 
-    await VendorServiceSlot.findByIdAndDelete(slotId);
+        if (dateEntryIdx >= 0) {
+            const dateEntry = slotDoc.dates[dateEntryIdx] as any;
+            dateEntry.timings = dateEntry.timings.filter((t: any) => t.fromTime !== fromTime);
+
+            // If no more timings for this date, remove the date entry
+            if (dateEntry.timings.length === 0) {
+                slotDoc.dates.splice(dateEntryIdx, 1);
+            }
+
+            // If no more dates, delete the entire document
+            if ((slotDoc.dates as any[]).length === 0) {
+                await VendorServiceSlot.findByIdAndDelete(slotId);
+            } else {
+                await slotDoc.save();
+            }
+        }
+    } else {
+        // Delete entire slot document
+        await VendorServiceSlot.findByIdAndDelete(slotId);
+    }
 
     res.status(200).json({
         success: true,
