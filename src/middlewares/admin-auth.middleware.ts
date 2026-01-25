@@ -23,9 +23,12 @@ function extractClerkIdFromToken(token: string): string | null {
     }
 }
 
+// Roles allowed to access admin portal
+const ADMIN_PORTAL_ROLES = ['admin', 'vendor'];
+
 /**
- * Middleware to protect admin routes
- * Verifies the user is authenticated via Clerk and has admin role
+ * Middleware to protect admin portal routes
+ * Verifies the user is authenticated via Clerk and has admin or vendor role
  */
 export const protectAdmin = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
     let token: string | undefined;
@@ -57,9 +60,9 @@ export const protectAdmin = asyncHandler(async (req: Request, res: Response, nex
         return next(new AppError('Your account has been deactivated. Please contact support.', 403));
     }
 
-    // Check if user has admin role
-    if (user.role !== 'admin') {
-        return next(new AppError('Access denied. This resource is only available to administrators.', 403));
+    // Check if user has admin or vendor role
+    if (!ADMIN_PORTAL_ROLES.includes(user.role)) {
+        return next(new AppError('Access denied. This resource is only available to administrators and vendors.', 403));
     }
 
     // Attach user to request
@@ -73,7 +76,7 @@ export const protectAdmin = asyncHandler(async (req: Request, res: Response, nex
 });
 
 /**
- * Middleware to optionally authenticate admin
+ * Middleware to optionally authenticate admin/vendor
  * Does not throw error if not authenticated
  */
 export const optionalAdminAuth = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
@@ -91,7 +94,11 @@ export const optionalAdminAuth = asyncHandler(async (req: Request, res: Response
         const clerkId = extractClerkIdFromToken(token);
 
         if (clerkId) {
-            const user = await User.findOne({ clerkId, isActive: true, role: 'admin' });
+            const user = await User.findOne({
+                clerkId,
+                isActive: true,
+                role: { $in: ADMIN_PORTAL_ROLES }
+            });
 
             if (user) {
                 req.user = user;
@@ -105,5 +112,16 @@ export const optionalAdminAuth = asyncHandler(async (req: Request, res: Response
         // Silently continue without authentication
     }
 
+    next();
+});
+
+/**
+ * Middleware to restrict access to admin-only
+ * Use after protectAdmin when you need admin-only access
+ */
+export const adminOnly = asyncHandler(async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user || req.user.role !== 'admin') {
+        return next(new AppError('Access denied. This resource is only available to administrators.', 403));
+    }
     next();
 });

@@ -27,7 +27,7 @@ function sanitizeValue(value: unknown): unknown {
     if (value && typeof value === 'object') {
         const sanitized: Record<string, unknown> = {};
         for (const [key, val] of Object.entries(value)) {
-            // Skip keys that start with $ (MongoDB operators) - handled by mongo-sanitize
+            // Remove keys that start with $ (MongoDB operators) to prevent NoSQL injection
             if (!key.startsWith('$')) {
                 sanitized[key] = sanitizeValue(val);
             }

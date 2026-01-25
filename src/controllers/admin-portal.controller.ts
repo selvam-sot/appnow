@@ -4,8 +4,9 @@ import { AppError } from '../utils/appError.util';
 import User from '../models/user.model';
 
 /**
- * Sync admin user from Clerk
- * Creates or updates admin user record
+ * Sync admin/vendor user from Clerk
+ * Creates or updates user record for admin portal access
+ * Allows both 'admin' and 'vendor' roles
  */
 export const syncAdmin = asyncHandler(async (req: Request, res: Response) => {
     const { clerkId, email, firstName, lastName } = req.body;
@@ -23,9 +24,10 @@ export const syncAdmin = asyncHandler(async (req: Request, res: Response) => {
     });
 
     if (user) {
-        // Verify user has admin role
-        if (user.role !== 'admin') {
-            throw new AppError('Access denied. This account is not authorized for admin access.', 403);
+        // Verify user has admin or vendor role
+        const allowedRoles = ['admin', 'vendor'];
+        if (!allowedRoles.includes(user.role)) {
+            throw new AppError('Access denied. This account is not authorized for admin portal access.', 403);
         }
 
         // Update existing user
@@ -38,9 +40,9 @@ export const syncAdmin = asyncHandler(async (req: Request, res: Response) => {
         user.lastSyncedAt = new Date();
         await user.save();
     } else {
-        // For security, don't auto-create admin users
-        // Admins must be pre-created in the database with role='admin'
-        throw new AppError('Admin account not found. Please contact system administrator.', 404);
+        // For security, don't auto-create admin/vendor users
+        // Users must be pre-created in the database with role='admin' or 'vendor'
+        throw new AppError('Account not found. Please contact system administrator.', 404);
     }
 
     res.status(200).json({
