@@ -58,14 +58,11 @@ app.use(helmet()); // Set security HTTP headers
 app.use(hpp()); // Prevent HTTP Parameter Pollution
 app.use(xssSanitize); // Sanitize user input against XSS and NoSQL injection
 
-// Rate limiting - apply to all API routes (skip vendor routes in development)
+// Rate limiting - apply to all API routes (only in production)
 if (process.env.NODE_ENV === 'production') {
   app.use('/api/', generalLimiter);
-} else {
-  // In development, only apply to non-vendor routes to allow faster testing
-  app.use('/api/v1/admin', generalLimiter);
-  app.use('/api/v1/customer', generalLimiter);
 }
+// In development, rate limiting is disabled for faster testing
 
 // Request logging middleware
 app.use((req: Request, _res: Response, next: NextFunction) => {
