@@ -498,6 +498,98 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
             refund: refundResult
         });
 
+    } else if (req.body.type == 'mark-missed') {
+        delete req.body.type;
+        const { appointmentId, reason } = req.body;
+
+        if (!reason || reason.trim().length < 5) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a reason (at least 5 characters)'
+            });
+        }
+
+        const appointment = await Appointment.findById(appointmentId);
+
+        if (!appointment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
+            });
+        }
+
+        // Check if customer owns this appointment
+        if (appointment.customerId.toString() !== req.body.customerId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to update this appointment'
+            });
+        }
+
+        if (!['confirmed', 'completed'].includes(appointment.status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Only confirmed or completed appointments can be marked as missed'
+            });
+        }
+
+        appointment.status = 'missed';
+        (appointment as any).statusChangedBy = 'customer';
+        (appointment as any).statusReason = reason.trim();
+        await appointment.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Appointment marked as missed',
+            data: appointment
+        });
+
+    } else if (req.body.type == 'mark-failed') {
+        delete req.body.type;
+        const { appointmentId, reason } = req.body;
+
+        if (!reason || reason.trim().length < 5) {
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a reason (at least 5 characters)'
+            });
+        }
+
+        const appointment = await Appointment.findById(appointmentId);
+
+        if (!appointment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
+            });
+        }
+
+        // Check if customer owns this appointment
+        if (appointment.customerId.toString() !== req.body.customerId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to update this appointment'
+            });
+        }
+
+        if (!['confirmed', 'completed'].includes(appointment.status)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Only confirmed or completed appointments can be marked as failed'
+            });
+        }
+
+        appointment.status = 'failed';
+        (appointment as any).statusChangedBy = 'customer';
+        (appointment as any).statusReason = reason.trim();
+        await appointment.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Appointment marked as failed',
+            data: appointment
+        });
+
     } else {
         // Get appointments
         delete req.body.type;

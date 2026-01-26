@@ -405,11 +405,93 @@ export const completeAppointment = asyncHandler(async (req: Request, res: Respon
     }
 
     appointment.status = 'completed';
+    (appointment as any).completedAt = new Date();
+    (appointment as any).statusChangedBy = 'vendor';
     await appointment.save();
 
     res.status(200).json({
         success: true,
         message: 'Appointment marked as completed'
+    });
+});
+
+/**
+ * Mark appointment as missed (customer no-show)
+ */
+export const markAppointmentMissed = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const vendorId = req.vendorId;
+
+    if (!reason || reason.trim().length < 5) {
+        throw new AppError('Please provide a reason (at least 5 characters)', 400);
+    }
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    if (!serviceIds.includes(appointment.vendorServiceId.toString())) {
+        throw new AppError('Not authorized to access this appointment', 403);
+    }
+
+    if (!['confirmed', 'completed'].includes(appointment.status)) {
+        throw new AppError('Only confirmed or completed appointments can be marked as missed', 400);
+    }
+
+    appointment.status = 'missed';
+    (appointment as any).statusChangedBy = 'vendor';
+    (appointment as any).statusReason = reason.trim();
+    await appointment.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Appointment marked as missed'
+    });
+});
+
+/**
+ * Mark appointment as failed (service issue)
+ */
+export const markAppointmentFailed = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const vendorId = req.vendorId;
+
+    if (!reason || reason.trim().length < 5) {
+        throw new AppError('Please provide a reason (at least 5 characters)', 400);
+    }
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id);
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    if (!serviceIds.includes(appointment.vendorServiceId.toString())) {
+        throw new AppError('Not authorized to access this appointment', 403);
+    }
+
+    if (!['confirmed', 'completed'].includes(appointment.status)) {
+        throw new AppError('Only confirmed or completed appointments can be marked as failed', 400);
+    }
+
+    appointment.status = 'failed';
+    (appointment as any).statusChangedBy = 'vendor';
+    (appointment as any).statusReason = reason.trim();
+    await appointment.save();
+
+    res.status(200).json({
+        success: true,
+        message: 'Appointment marked as failed'
     });
 });
 

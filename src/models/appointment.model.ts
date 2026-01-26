@@ -90,7 +90,7 @@ const AppointmentSchema: Schema = new Schema({
     },
     status: {
         type: String,
-        enum: ['pending', 'confirmed', 'cancelled', 'completed'],
+        enum: ['pending', 'confirmed', 'cancelled', 'completed', 'missed', 'failed'],
         default: 'pending'
     },
     paymentIntentId: {
@@ -116,6 +116,17 @@ const AppointmentSchema: Schema = new Schema({
         type: Date
     },
     cancellationReason: {
+        type: String
+    },
+    // Completion tracking fields
+    completedAt: {
+        type: Date
+    },
+    statusChangedBy: {
+        type: String,
+        enum: ['auto', 'vendor', 'customer', 'admin']
+    },
+    statusReason: {
         type: String
     }
 }, {

@@ -1,6 +1,7 @@
 import express from 'express';
+import { body } from 'express-validator';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
-import { getAppointments } from '../../controllers/manage-appointment.controller';
+import { getAppointments, getAppointmentById, updateAppointmentStatus } from '../../controllers/manage-appointment.controller';
 
 const router = express.Router();
 
@@ -8,5 +9,10 @@ const router = express.Router();
 router.use(protectAdmin);
 
 router.post('/', getAppointments);
+router.get('/:id', getAppointmentById);
+router.patch('/:id/status', [
+    body('status').notEmpty().withMessage('Status is required'),
+    body('reason').optional().isString()
+], updateAppointmentStatus);
 
 export default router;

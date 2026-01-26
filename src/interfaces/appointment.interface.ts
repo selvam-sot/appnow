@@ -30,7 +30,7 @@ export interface IAppointment {
     total: number;
     paymentMode: string;
     cardDetails: null | ICardDetails;
-    status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+    status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'missed' | 'failed';
     // Payment fields
     paymentIntentId?: string;
     paymentStatus?: 'pending' | 'completed' | 'refunded' | 'partially_refunded' | 'failed';
@@ -41,6 +41,10 @@ export interface IAppointment {
     // Cancellation fields
     cancelledAt?: Date;
     cancellationReason?: string;
+    // Completion fields
+    completedAt?: Date;
+    statusChangedBy?: 'auto' | 'vendor' | 'customer' | 'admin';
+    statusReason?: string;
     // Timestamps
     createdAt?: Date;
     updatedAt?: Date;

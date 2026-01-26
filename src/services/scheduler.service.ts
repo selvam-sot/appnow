@@ -11,6 +11,9 @@ import logger from '../config/logger';
 // Track sent reminders to avoid duplicates
 const sentReminders = new Map<string, Date>();
 
+// Track last auto-complete run to avoid running too frequently
+let lastAutoCompleteRun = new Date(0);
+
 // Clean up old entries every hour
 setInterval(() => {
     const now = new Date();
@@ -67,6 +70,95 @@ export async function checkAndSendReminders(): Promise<void> {
         logger.info(`Reminder check completed. 24h: ${appointments24h.length}, 1h: ${appointments1h.length}`);
     } catch (error: any) {
         logger.error(`Error in reminder scheduler: ${error.message}`);
+    }
+}
+
+/**
+ * Auto-complete past confirmed appointments
+ * Runs periodically to mark appointments as completed when their end time has passed
+ */
+export async function autoCompleteAppointments(): Promise<void> {
+    try {
+        const now = new Date();
+
+        // Only run every 15 minutes to avoid excessive DB operations
+        const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+        if (lastAutoCompleteRun > fifteenMinutesAgo) {
+            return;
+        }
+        lastAutoCompleteRun = now;
+
+        logger.info('Running auto-complete check for past appointments...');
+
+        // Find confirmed appointments from past days (not today, to give buffer)
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(23, 59, 59, 999);
+
+        // Find all confirmed appointments that ended before yesterday
+        const pastConfirmedAppointments = await Appointment.find({
+            appointmentDate: { $lte: yesterday },
+            status: 'confirmed'
+        }).lean();
+
+        if (pastConfirmedAppointments.length === 0) {
+            logger.info('No past confirmed appointments to auto-complete');
+            return;
+        }
+
+        // Also check for confirmed appointments from today where end time has passed
+        const todayStart = new Date(now);
+        todayStart.setHours(0, 0, 0, 0);
+
+        const todayEnd = new Date(now);
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const todayAppointments = await Appointment.find({
+            appointmentDate: { $gte: todayStart, $lte: todayEnd },
+            status: 'confirmed'
+        }).lean();
+
+        // Filter today's appointments where end time has passed (with 30 min buffer)
+        const bufferMinutes = 30;
+        const currentTimeWithBuffer = new Date(now.getTime() - bufferMinutes * 60 * 1000);
+        const currentHour = currentTimeWithBuffer.getHours();
+        const currentMinute = currentTimeWithBuffer.getMinutes();
+        const currentTimeStr = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+
+        const todayPastAppointments = todayAppointments.filter(apt => {
+            if (!apt.endTime) return false;
+            return apt.endTime <= currentTimeStr;
+        });
+
+        // Combine all appointments to auto-complete
+        const appointmentsToComplete = [...pastConfirmedAppointments, ...todayPastAppointments];
+
+        if (appointmentsToComplete.length === 0) {
+            logger.info('No appointments to auto-complete');
+            return;
+        }
+
+        // Update all found appointments to completed
+        const appointmentIds = appointmentsToComplete.map(apt => apt._id);
+
+        const result = await Appointment.updateMany(
+            { _id: { $in: appointmentIds } },
+            {
+                $set: {
+                    status: 'completed',
+                    completedAt: now,
+                    statusChangedBy: 'auto'
+                }
+            }
+        );
+
+        logger.info(`Auto-completed ${result.modifiedCount} appointments`);
+
+        // TODO: Send notifications to customers about completed appointments
+        // This can be added later when push notifications are fully implemented
+
+    } catch (error: any) {
+        logger.error(`Error in auto-complete scheduler: ${error.message}`);
     }
 }
 
@@ -160,17 +252,20 @@ async function sendReminderForAppointment(appointment: any, reminderType: '24h' 
  * Runs every 5 minutes
  */
 export function startReminderScheduler(): void {
-    logger.info('Starting appointment reminder scheduler...');
+    logger.info('Starting appointment scheduler...');
 
     // Run immediately on start
     checkAndSendReminders();
+    autoCompleteAppointments();
 
-    // Then run every 5 minutes
+    // Then run every 5 minutes for reminders
     setInterval(() => {
         checkAndSendReminders();
+        // Auto-complete has its own internal throttle (every 15 min)
+        autoCompleteAppointments();
     }, 5 * 60 * 1000);
 
-    logger.info('Appointment reminder scheduler started (runs every 5 minutes)');
+    logger.info('Appointment scheduler started (reminders: every 5 min, auto-complete: every 15 min)');
 }
 
 /**
@@ -209,5 +304,6 @@ export async function sendManualReminder(appointmentId: string): Promise<{ succe
 export default {
     startReminderScheduler,
     checkAndSendReminders,
+    autoCompleteAppointments,
     sendManualReminder,
 };

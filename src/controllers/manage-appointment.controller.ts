@@ -78,3 +78,69 @@ export const getServiceSlots2 = asyncHandler(async (req: Request, res: Response)
     }
     res.json([]);
 });
+
+/**
+ * Get appointment by ID (Admin)
+ */
+export const getAppointmentById = asyncHandler(async (req: Request, res: Response) => {
+    const appointment = await Appointment.findById(req.params.id)
+        .populate('customerId', 'firstName lastName email phone')
+        .populate({
+            path: 'vendorServiceId',
+            populate: [
+                { path: 'vendorId', select: 'vendorName email phone' },
+                { path: 'serviceId', select: 'name' }
+            ]
+        });
+
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        data: appointment
+    });
+});
+
+/**
+ * Update appointment status (Admin)
+ */
+export const updateAppointmentStatus = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status, reason } = req.body;
+
+    const validStatuses = ['pending', 'confirmed', 'cancelled', 'completed', 'missed', 'failed'];
+    if (!validStatuses.includes(status)) {
+        throw new AppError(`Invalid status. Must be one of: ${validStatuses.join(', ')}`, 400);
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    // For missed/failed, require a reason
+    if (['missed', 'failed'].includes(status) && (!reason || reason.trim().length < 5)) {
+        throw new AppError('Please provide a reason (at least 5 characters) for missed/failed status', 400);
+    }
+
+    appointment.status = status;
+    (appointment as any).statusChangedBy = 'admin';
+
+    if (status === 'completed') {
+        (appointment as any).completedAt = new Date();
+    }
+
+    if (['missed', 'failed'].includes(status)) {
+        (appointment as any).statusReason = reason.trim();
+    }
+
+    await appointment.save();
+
+    res.status(200).json({
+        success: true,
+        message: `Appointment status updated to ${status}`,
+        data: appointment
+    });
+});

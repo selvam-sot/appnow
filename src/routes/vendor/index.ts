@@ -8,6 +8,8 @@ import {
     confirmAppointment,
     declineAppointment,
     completeAppointment,
+    markAppointmentMissed,
+    markAppointmentFailed,
     getVendorServices,
     getVendorServiceById,
     createVendorService,
@@ -50,6 +52,12 @@ router.post('/appointments/:id/decline', [
     body('reason').optional().isString()
 ], declineAppointment);
 router.post('/appointments/:id/complete', completeAppointment);
+router.post('/appointments/:id/missed', [
+    body('reason').notEmpty().withMessage('Reason is required').isLength({ min: 5 }).withMessage('Reason must be at least 5 characters')
+], markAppointmentMissed);
+router.post('/appointments/:id/failed', [
+    body('reason').notEmpty().withMessage('Reason is required').isLength({ min: 5 }).withMessage('Reason must be at least 5 characters')
+], markAppointmentFailed);
 
 // Categories (for service creation)
 router.get('/categories', getCategories);
