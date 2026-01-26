@@ -272,7 +272,7 @@ export const getAppointments = asyncHandler(async (req: Request, res: Response) 
                 path: 'vendorServiceId',
                 populate: { path: 'serviceId', select: 'name' }
             })
-            .sort({ appointmentDate: -1, startTime: -1 })
+            .sort({ appointmentDate: -1 })
             .skip(skip)
             .limit(limitNum)
             .lean(),
@@ -927,7 +927,7 @@ export const getServiceSlots = asyncHandler(async (req: Request, res: Response) 
     }
 
     const slotDocs = await VendorServiceSlot.find(query)
-        .sort({ year: 1, month: 1 })
+        .sort({ year: 1 })
         .lean();
 
     // Flatten the nested structure for easier frontend consumption
