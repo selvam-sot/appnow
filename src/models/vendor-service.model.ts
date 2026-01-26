@@ -112,6 +112,21 @@ const VendorServiceSchema: Schema = new Schema({
         required: false,
         default: []
     },
+    // Rating fields
+    rating: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 5
+    },
+    totalReviews: {
+        type: Number,
+        default: 0
+    },
+    ratingSum: {
+        type: Number,
+        default: 0
+    },
 }, { 
     // Match the exact field names and structure from the database
     timestamps: {

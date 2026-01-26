@@ -34,5 +34,8 @@ export interface IVendorService {
     isFavorite: boolean;
     tags: [string];
     socialMediaLinks: [SocialMediaLink];
+    rating?: number;
+    totalReviews?: number;
+    ratingSum?: number;
     __v?: number;
 }

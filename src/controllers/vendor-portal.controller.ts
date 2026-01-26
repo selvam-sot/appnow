@@ -806,6 +806,228 @@ export const replyToReview = asyncHandler(async (req: Request, res: Response) =>
 });
 
 /**
+ * Get reviews for management (pending approval)
+ */
+export const getReviewsForManagement = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { status = 'all', page = 1, limit = 20 } = req.query;
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const query: any = { vendorId };
+    if (status !== 'all') {
+        query.status = status;
+    }
+
+    const [reviews, total, counts] = await Promise.all([
+        Review.find(query)
+            .populate('customerId', 'firstName lastName email')
+            .populate('vendorServiceId', 'name')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limitNum)
+            .lean(),
+        Review.countDocuments(query),
+        Review.aggregate([
+            { $match: { vendorId } },
+            { $group: { _id: '$status', count: { $sum: 1 } } }
+        ])
+    ]);
+
+    const countMap = Object.fromEntries(counts.map(c => [c._id, c.count]));
+
+    res.status(200).json({
+        success: true,
+        data: {
+            reviews: reviews.map(r => ({
+                id: r._id,
+                customerName: `${(r.customerId as any)?.firstName || ''} ${(r.customerId as any)?.lastName || ''}`.trim(),
+                customerEmail: (r.customerId as any)?.email,
+                serviceName: (r.vendorServiceId as any)?.name || 'Service',
+                serviceId: r.vendorServiceId,
+                rating: r.rating,
+                title: r.title,
+                comment: r.comment,
+                status: r.status,
+                reply: r.vendorResponse?.comment,
+                replyDate: r.vendorResponse?.respondedAt,
+                createdAt: r.createdAt
+            })),
+            counts: {
+                all: (countMap.pending || 0) + (countMap.approved || 0) + (countMap.rejected || 0),
+                pending: countMap.pending || 0,
+                approved: countMap.approved || 0,
+                rejected: countMap.rejected || 0
+            },
+            pagination: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                pages: Math.ceil(total / limitNum)
+            }
+        }
+    });
+});
+
+/**
+ * Get recent reviews for dashboard
+ */
+export const getRecentReviews = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { limit = 5 } = req.query;
+
+    const reviews = await Review.find({ vendorId })
+        .populate('customerId', 'firstName lastName')
+        .populate('vendorServiceId', 'name')
+        .sort({ createdAt: -1 })
+        .limit(parseInt(limit as string, 10))
+        .lean();
+
+    res.status(200).json({
+        success: true,
+        data: reviews.map(r => ({
+            id: r._id,
+            customerName: `${(r.customerId as any)?.firstName || ''} ${(r.customerId as any)?.lastName || ''}`.trim(),
+            serviceName: (r.vendorServiceId as any)?.name || 'Service',
+            rating: r.rating,
+            title: r.title,
+            comment: r.comment,
+            status: r.status,
+            createdAt: r.createdAt
+        }))
+    });
+});
+
+/**
+ * Helper function to update service and vendor ratings
+ */
+async function updateRatings(vendorServiceId: any, vendorId: any): Promise<void> {
+    // Update vendor service rating
+    const serviceRatingAgg = await Review.aggregate([
+        { $match: { vendorServiceId, status: 'approved' } },
+        {
+            $group: {
+                _id: null,
+                avgRating: { $avg: '$rating' },
+                totalReviews: { $sum: 1 },
+                ratingSum: { $sum: '$rating' }
+            }
+        }
+    ]);
+
+    if (serviceRatingAgg.length > 0) {
+        await VendorService.findByIdAndUpdate(vendorServiceId, {
+            rating: Math.round(serviceRatingAgg[0].avgRating * 10) / 10,
+            totalReviews: serviceRatingAgg[0].totalReviews,
+            ratingSum: serviceRatingAgg[0].ratingSum
+        });
+    } else {
+        await VendorService.findByIdAndUpdate(vendorServiceId, {
+            rating: 0,
+            totalReviews: 0,
+            ratingSum: 0
+        });
+    }
+
+    // Update vendor overall rating (average of all service ratings)
+    const vendorServices = await VendorService.find({ vendorId })
+        .select('rating totalReviews')
+        .lean();
+
+    const servicesWithRatings = vendorServices.filter(s => (s as any).totalReviews > 0);
+
+    if (servicesWithRatings.length > 0) {
+        // Calculate weighted average based on number of reviews
+        let totalWeight = 0;
+        let weightedSum = 0;
+        let totalReviews = 0;
+
+        for (const service of servicesWithRatings) {
+            const reviews = (service as any).totalReviews || 0;
+            const rating = (service as any).rating || 0;
+            weightedSum += rating * reviews;
+            totalWeight += reviews;
+            totalReviews += reviews;
+        }
+
+        const avgRating = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+        await Vendor.findByIdAndUpdate(vendorId, {
+            rating: Math.round(avgRating * 10) / 10,
+            totalReviews
+        });
+    } else {
+        await Vendor.findByIdAndUpdate(vendorId, {
+            rating: 0,
+            totalReviews: 0
+        });
+    }
+}
+
+/**
+ * Approve a review
+ */
+export const approveReview = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const review = await Review.findOne({ _id: id, vendorId });
+
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    if (review.status === 'approved') {
+        throw new AppError('Review is already approved', 400);
+    }
+
+    review.status = 'approved';
+    await review.save();
+
+    // Update ratings
+    await updateRatings(review.vendorServiceId, vendorId);
+
+    res.status(200).json({
+        success: true,
+        message: 'Review approved successfully'
+    });
+});
+
+/**
+ * Reject a review
+ */
+export const rejectReview = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const review = await Review.findOne({ _id: id, vendorId });
+
+    if (!review) {
+        throw new AppError('Review not found', 404);
+    }
+
+    if (review.status === 'rejected') {
+        throw new AppError('Review is already rejected', 400);
+    }
+
+    const wasApproved = review.status === 'approved';
+    review.status = 'rejected';
+    await review.save();
+
+    // If it was previously approved, recalculate ratings
+    if (wasApproved) {
+        await updateRatings(review.vendorServiceId, vendorId);
+    }
+
+    res.status(200).json({
+        success: true,
+        message: 'Review rejected successfully'
+    });
+});
+
+/**
  * Get categories for service creation
  */
 export const getCategories = asyncHandler(async (req: Request, res: Response) => {
@@ -817,6 +1039,27 @@ export const getCategories = asyncHandler(async (req: Request, res: Response) =>
             _id: cat._id,
             name: (cat as any).name || cat.categoryName,
             description: cat.description
+        }))
+    });
+});
+
+/**
+ * Get subcategories for a category
+ */
+export const getSubCategories = asyncHandler(async (req: Request, res: Response) => {
+    const { categoryId } = req.params;
+
+    const subCategories = await SubCategory.find({
+        categoryId,
+        isActive: true
+    }).lean();
+
+    res.status(200).json({
+        success: true,
+        data: subCategories.map(sub => ({
+            _id: sub._id,
+            name: (sub as any).name || sub.subCategoryName,
+            description: sub.description
         }))
     });
 });

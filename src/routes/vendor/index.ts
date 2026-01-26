@@ -26,7 +26,12 @@ import {
     updateProfile,
     getReviews,
     replyToReview,
-    getCategories
+    getReviewsForManagement,
+    getRecentReviews,
+    approveReview,
+    rejectReview,
+    getCategories,
+    getSubCategories
 } from '../../controllers/vendor-portal.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
 
@@ -61,6 +66,7 @@ router.post('/appointments/:id/failed', [
 
 // Categories (for service creation)
 router.get('/categories', getCategories);
+router.get('/categories/:categoryId/subcategories', getSubCategories);
 
 // Services - CRUD
 router.get('/services', getVendorServices);
@@ -97,8 +103,12 @@ router.put('/profile', updateProfile);
 
 // Reviews
 router.get('/reviews', getReviews);
+router.get('/reviews/manage', getReviewsForManagement);
+router.get('/reviews/recent', getRecentReviews);
 router.post('/reviews/:id/reply', [
     body('reply').notEmpty().withMessage('Reply is required')
 ], replyToReview);
+router.post('/reviews/:id/approve', approveReview);
+router.post('/reviews/:id/reject', rejectReview);
 
 export default router;
