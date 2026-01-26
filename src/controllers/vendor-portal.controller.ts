@@ -533,7 +533,7 @@ export const getVendorServices = asyncHandler(async (req: Request, res: Response
         success: true,
         data: services.map(service => ({
             id: service._id,
-            name: (service.serviceId as any)?.name || 'Service',
+            name: service.name || (service.serviceId as any)?.name || 'Service',
             description: service.description || (service.serviceId as any)?.description,
             categoryName: (service.categoryId as any)?.name,
             price: service.price,
