@@ -320,13 +320,9 @@ export const reorderPromotions = async (req: Request, res: Response): Promise<vo
  */
 export const getBannerPromotions = async (req: Request, res: Response): Promise<void> => {
     try {
-        const now = new Date();
-
         const promotions = await Promotion.find({
             isActive: true,
             showInBanner: true,
-            validFrom: { $lte: now },
-            validUntil: { $gte: now }
         })
         .select('title subtitle description code discount gradient icon isNew isFeatured displayOrder')
         .sort({ displayOrder: 1 })
@@ -352,12 +348,8 @@ export const getBannerPromotions = async (req: Request, res: Response): Promise<
  */
 export const getActivePromotions = async (req: Request, res: Response): Promise<void> => {
     try {
-        const now = new Date();
-
         const promotions = await Promotion.find({
             isActive: true,
-            validFrom: { $lte: now },
-            validUntil: { $gte: now }
         })
         .sort({ displayOrder: 1 });
 
@@ -408,19 +400,32 @@ export const validatePromoCode = async (req: Request, res: Response): Promise<vo
             return;
         }
 
-        const now = new Date();
-
         const promotion = await Promotion.findOne({
             code: code.toUpperCase(),
             isActive: true,
-            validFrom: { $lte: now },
-            validUntil: { $gte: now }
         });
 
         if (!promotion) {
             res.status(404).json({
                 success: false,
                 error: 'Invalid or expired promo code',
+            });
+            return;
+        }
+
+        // Check date validity
+        const now = new Date();
+        if (promotion.validFrom && new Date(promotion.validFrom) > now) {
+            res.status(400).json({
+                success: false,
+                error: 'This promo code is not yet active',
+            });
+            return;
+        }
+        if (promotion.validUntil && new Date(promotion.validUntil) < now) {
+            res.status(400).json({
+                success: false,
+                error: 'This promo code has expired',
             });
             return;
         }
