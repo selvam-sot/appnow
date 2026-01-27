@@ -23,7 +23,7 @@ export const getAllPromotions = async (req: Request, res: Response): Promise<voi
             filter.isFeatured = isFeatured === 'true';
         }
 
-        const promotions = await Promotion.find(filter).sort({ displayOrder: 1, createdAt: -1 });
+        const promotions = await Promotion.find(filter).sort({ displayOrder: 1 });
 
         res.status(200).json({
             success: true,
