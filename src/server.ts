@@ -108,9 +108,17 @@ try {
 
   logger.info('Routes loaded successfully');
 
-  // Start appointment reminder scheduler
-  const { startReminderScheduler } = require('./services/scheduler.service');
-  startReminderScheduler();
+  // Start notification scheduler (smart scheduling approach)
+  const { startNotificationScheduler } = require('./services/notificationScheduler.service');
+  startNotificationScheduler();
+
+  // Start auto-complete scheduler for past appointments
+  const { autoCompleteAppointments } = require('./services/scheduler.service');
+  autoCompleteAppointments();
+  // Run auto-complete every 15 minutes
+  setInterval(() => {
+    autoCompleteAppointments();
+  }, 15 * 60 * 1000);
 } catch (error) {
   logger.error('Error loading routes:', error);
 }

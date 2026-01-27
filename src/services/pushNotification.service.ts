@@ -189,14 +189,27 @@ export async function sendAppointmentReminderNotification(
         date: string;
         time: string;
         appointmentId: string;
+        reminderType?: '24h' | '1h';
     }
 ): Promise<SendNotificationResult> {
-    const { serviceName, vendorName, date, time, appointmentId } = appointmentDetails;
+    const { serviceName, vendorName, date, time, appointmentId, reminderType = '1h' } = appointmentDetails;
 
-    const title = 'Appointment Reminder';
-    const body = vendorName
-        ? `Reminder: Your appointment for ${serviceName} with ${vendorName} is scheduled for ${date} at ${time}.`
-        : `Reminder: Your appointment for ${serviceName} is scheduled for ${date} at ${time}.`;
+    // Customize title based on reminder type
+    const title = reminderType === '1h'
+        ? 'Appointment in 1 Hour!'
+        : 'Appointment Tomorrow';
+
+    // Customize body based on reminder type
+    let body: string;
+    if (reminderType === '1h') {
+        body = vendorName
+            ? `Your ${serviceName} appointment with ${vendorName} starts at ${time}. Get ready!`
+            : `Your ${serviceName} appointment starts at ${time}. Get ready!`;
+    } else {
+        body = vendorName
+            ? `Reminder: Your ${serviceName} appointment with ${vendorName} is tomorrow (${date}) at ${time}.`
+            : `Reminder: Your ${serviceName} appointment is tomorrow (${date}) at ${time}.`;
+    }
 
     return sendNotificationToUser({
         userId,
@@ -208,6 +221,7 @@ export async function sendAppointmentReminderNotification(
             serviceName,
             date,
             time,
+            reminderType,
         },
         saveToDatabase: true,
     });

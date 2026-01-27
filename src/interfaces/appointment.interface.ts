@@ -45,6 +45,9 @@ export interface IAppointment {
     completedAt?: Date;
     statusChangedBy?: 'auto' | 'vendor' | 'customer' | 'admin';
     statusReason?: string;
+    // Reminder tracking fields
+    reminder24hSentAt?: Date;
+    reminder1hSentAt?: Date;
     // Timestamps
     createdAt?: Date;
     updatedAt?: Date;

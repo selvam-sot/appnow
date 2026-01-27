@@ -11,6 +11,12 @@ import { sendBookingConfirmationEmail } from '../services/email.service';
 import { addEventToCalendar } from '../services/calendar.service';
 import StripeService from '../services/stripe.service';
 import { sendBookingConfirmationNotification } from '../services/pushNotification.service';
+import {
+    scheduleAppointmentReminders,
+    cancelAppointmentReminders,
+    rescheduleAppointmentReminders,
+    syncTodaySchedule
+} from '../services/notificationScheduler.service';
 import logger from '../config/logger';
 import mongoose from 'mongoose';
 
@@ -240,6 +246,33 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
             logger.error(`Failed to send booking confirmation notification: ${notificationError.message}`);
         }
 
+        // Schedule reminder notifications for this appointment
+        try {
+            const populatedAppointment = await Appointment.findById(appointment._id)
+                .populate('customerId', '_id')
+                .populate({
+                    path: 'vendorServiceId',
+                    populate: [
+                        { path: 'vendorId', select: 'vendorName' },
+                        { path: 'serviceId', select: 'name' }
+                    ]
+                })
+                .lean();
+
+            if (populatedAppointment) {
+                await scheduleAppointmentReminders(populatedAppointment as any);
+                logger.info(`Scheduled reminders for appointment ${appointment._id}`);
+            }
+
+            // Sync today's schedule to process any due notifications immediately
+            syncTodaySchedule().catch(err => {
+                logger.error(`Failed to sync today's schedule: ${err.message}`);
+            });
+        } catch (schedulerError: any) {
+            // Don't fail the booking if scheduler fails
+            logger.error(`Failed to schedule reminders: ${schedulerError.message}`);
+        }
+
         res.status(201).json({
             success: true,
             data: appointment,
@@ -384,19 +417,12 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
 
         const updatedAppointment = await appointment.save();
 
-        // Send reschedule notification
+        // Reschedule reminder notifications
         try {
-            const vendorService = await VendorService.findById(appointment.vendorServiceId)
-                .populate('vendorId', 'name')
-                .populate('serviceId', 'name')
-                .lean();
-
-            if (vendorService) {
-                // TODO: Send reschedule push notification
-                logger.info(`Appointment ${appointmentId} rescheduled from ${oldDate} ${oldTime} to ${appointmentDate} ${startTime}`);
-            }
-        } catch (notificationError: any) {
-            logger.error(`Failed to send reschedule notification: ${notificationError.message}`);
+            await rescheduleAppointmentReminders(appointmentId);
+            logger.info(`Appointment ${appointmentId} rescheduled from ${oldDate} ${oldTime} to ${appointmentDate} ${startTime}`);
+        } catch (schedulerError: any) {
+            logger.error(`Failed to reschedule reminders: ${schedulerError.message}`);
         }
 
         res.status(200).json({
@@ -476,19 +502,12 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
 
         const updatedAppointment = await appointment.save();
 
-        // Send cancellation notification
+        // Cancel scheduled reminder notifications
         try {
-            const vendorService = await VendorService.findById(appointment.vendorServiceId)
-                .populate('vendorId', 'name')
-                .populate('serviceId', 'name')
-                .lean();
-
-            if (vendorService) {
-                // TODO: Send cancellation push notification
-                logger.info(`Appointment ${appointmentId} cancelled successfully`);
-            }
-        } catch (notificationError: any) {
-            logger.error(`Failed to send cancellation notification: ${notificationError.message}`);
+            const cancelledCount = await cancelAppointmentReminders(appointmentId);
+            logger.info(`Appointment ${appointmentId} cancelled successfully. ${cancelledCount} reminders cancelled.`);
+        } catch (schedulerError: any) {
+            logger.error(`Failed to cancel reminders: ${schedulerError.message}`);
         }
 
         res.status(200).json({

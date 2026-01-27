@@ -128,6 +128,13 @@ const AppointmentSchema: Schema = new Schema({
     },
     statusReason: {
         type: String
+    },
+    // Reminder tracking fields
+    reminder24hSentAt: {
+        type: Date
+    },
+    reminder1hSentAt: {
+        type: Date
     }
 }, {
     // Match the exact field names and structure from the database
@@ -155,5 +162,7 @@ AppointmentSchema.index({ paymentStatus: 1 });
 AppointmentSchema.index({ paymentIntentId: 1 });
 // Index for created date (dashboard analytics)
 AppointmentSchema.index({ createdAt: -1 });
+// Index for reminder queries
+AppointmentSchema.index({ appointmentDate: 1, status: 1, reminder1hSentAt: 1 });
 
 export default mongoose.model<IAppointment & Document>('Appointment', AppointmentSchema);

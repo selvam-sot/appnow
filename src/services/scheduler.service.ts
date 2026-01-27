@@ -1,6 +1,7 @@
 /**
  * Scheduler Service
  * Handles scheduled tasks like appointment reminders
+ * Uses database tracking to persist reminder status through server restarts
  */
 
 import Appointment from '../models/appointment.model';
@@ -8,68 +9,195 @@ import VendorService from '../models/vendor-service.model';
 import { sendAppointmentReminderNotification } from './pushNotification.service';
 import logger from '../config/logger';
 
-// Track sent reminders to avoid duplicates
-const sentReminders = new Map<string, Date>();
-
 // Track last auto-complete run to avoid running too frequently
 let lastAutoCompleteRun = new Date(0);
 
-// Clean up old entries every hour
-setInterval(() => {
-    const now = new Date();
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-
-    sentReminders.forEach((sentAt, key) => {
-        if (sentAt < oneHourAgo) {
-            sentReminders.delete(key);
-        }
-    });
-}, 60 * 60 * 1000);
-
 /**
  * Check and send appointment reminders
- * Called periodically by the scheduler
+ * Uses database fields to track sent reminders (persists through restarts)
  */
 export async function checkAndSendReminders(): Promise<void> {
     try {
         const now = new Date();
 
-        // Find appointments in the next 24 hours that are confirmed
-        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-
-        // Get appointments for reminder (24 hours before)
-        const appointments24h = await findUpcomingAppointments(
-            new Date(now.getTime() + 23 * 60 * 60 * 1000),
-            new Date(now.getTime() + 25 * 60 * 60 * 1000)
-        );
-
-        // Get appointments for reminder (1 hour before)
-        const appointments1h = await findUpcomingAppointments(
-            new Date(now.getTime() + 55 * 60 * 1000),
-            new Date(now.getTime() + 65 * 60 * 1000)
-        );
-
         // Send 24-hour reminders
-        for (const appointment of appointments24h) {
-            const reminderKey = `${appointment._id}-24h`;
-            if (!sentReminders.has(reminderKey)) {
-                await sendReminderForAppointment(appointment, '24h');
-                sentReminders.set(reminderKey, now);
-            }
-        }
+        await send24HourReminders(now);
 
         // Send 1-hour reminders
-        for (const appointment of appointments1h) {
-            const reminderKey = `${appointment._id}-1h`;
-            if (!sentReminders.has(reminderKey)) {
-                await sendReminderForAppointment(appointment, '1h');
-                sentReminders.set(reminderKey, now);
+        await send1HourReminders(now);
+
+    } catch (error: any) {
+        logger.error(`Error in reminder scheduler: ${error.message}`);
+    }
+}
+
+/**
+ * Send 24-hour reminders for appointments happening in 23-25 hours
+ */
+async function send24HourReminders(now: Date): Promise<void> {
+    try {
+        const startWindow = new Date(now.getTime() + 23 * 60 * 60 * 1000);
+        const endWindow = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+
+        // Find appointments that:
+        // 1. Are in the 24-hour window
+        // 2. Are confirmed or pending
+        // 3. Haven't received 24h reminder yet
+        const appointments = await findAppointmentsForReminder(startWindow, endWindow, 'reminder24hSentAt');
+
+        let sentCount = 0;
+        for (const appointment of appointments) {
+            const sent = await sendReminderForAppointment(appointment, '24h');
+            if (sent) {
+                // Update database to mark reminder as sent
+                await Appointment.findByIdAndUpdate(appointment._id, {
+                    reminder24hSentAt: now
+                });
+                sentCount++;
             }
         }
 
-        logger.info(`Reminder check completed. 24h: ${appointments24h.length}, 1h: ${appointments1h.length}`);
+        if (sentCount > 0) {
+            logger.info(`Sent ${sentCount} 24-hour reminders`);
+        }
     } catch (error: any) {
-        logger.error(`Error in reminder scheduler: ${error.message}`);
+        logger.error(`Error sending 24h reminders: ${error.message}`);
+    }
+}
+
+/**
+ * Send 1-hour reminders for appointments happening in 55-65 minutes
+ */
+async function send1HourReminders(now: Date): Promise<void> {
+    try {
+        const startWindow = new Date(now.getTime() + 55 * 60 * 1000);
+        const endWindow = new Date(now.getTime() + 65 * 60 * 1000);
+
+        // Find appointments that:
+        // 1. Are in the 1-hour window
+        // 2. Are confirmed or pending
+        // 3. Haven't received 1h reminder yet
+        const appointments = await findAppointmentsForReminder(startWindow, endWindow, 'reminder1hSentAt');
+
+        let sentCount = 0;
+        for (const appointment of appointments) {
+            const sent = await sendReminderForAppointment(appointment, '1h');
+            if (sent) {
+                // Update database to mark reminder as sent
+                await Appointment.findByIdAndUpdate(appointment._id, {
+                    reminder1hSentAt: now
+                });
+                sentCount++;
+            }
+        }
+
+        if (sentCount > 0) {
+            logger.info(`Sent ${sentCount} 1-hour reminders`);
+        }
+    } catch (error: any) {
+        logger.error(`Error sending 1h reminders: ${error.message}`);
+    }
+}
+
+/**
+ * Find appointments for reminder within a time window
+ * @param startTime Window start time
+ * @param endTime Window end time
+ * @param reminderField Field to check if reminder was already sent
+ */
+async function findAppointmentsForReminder(
+    startTime: Date,
+    endTime: Date,
+    reminderField: 'reminder24hSentAt' | 'reminder1hSentAt'
+): Promise<any[]> {
+    try {
+        // Get date range for the query
+        const startDate = new Date(startTime);
+        startDate.setHours(0, 0, 0, 0);
+
+        const endDate = new Date(endTime);
+        endDate.setHours(23, 59, 59, 999);
+
+        // Build query to find appointments that haven't received this reminder
+        const query: any = {
+            appointmentDate: {
+                $gte: startDate,
+                $lte: endDate
+            },
+            status: { $in: ['confirmed', 'pending'] },
+            [reminderField]: { $exists: false } // Not sent yet
+        };
+
+        const appointments = await Appointment.find(query)
+            .populate('customerId', '_id clerkId firstName lastName expoPushToken email')
+            .populate({
+                path: 'vendorServiceId',
+                populate: [
+                    { path: 'vendorId', select: 'vendorName' },
+                    { path: 'serviceId', select: 'name' }
+                ]
+            })
+            .lean();
+
+        // Filter by exact time window
+        return appointments.filter(apt => {
+            if (!apt.startTime) return false;
+
+            const [hours, minutes] = apt.startTime.split(':').map(Number);
+            const aptDateTime = new Date(apt.appointmentDate);
+            aptDateTime.setHours(hours, minutes, 0, 0);
+
+            return aptDateTime >= startTime && aptDateTime <= endTime;
+        });
+    } catch (error: any) {
+        logger.error(`Error finding appointments for reminder: ${error.message}`);
+        return [];
+    }
+}
+
+/**
+ * Send reminder notification for a specific appointment
+ * @returns true if sent successfully, false otherwise
+ */
+async function sendReminderForAppointment(appointment: any, reminderType: '24h' | '1h'): Promise<boolean> {
+    try {
+        const customer = appointment.customerId;
+        if (!customer?._id) {
+            logger.warn(`No customer ID for appointment ${appointment._id}`);
+            return false;
+        }
+
+        const customerId = customer._id.toString();
+        const vendorService = appointment.vendorServiceId;
+        const serviceName = vendorService?.serviceId?.name || vendorService?.name || 'your service';
+        const vendorName = vendorService?.vendorId?.vendorName;
+
+        const appointmentDate = new Date(appointment.appointmentDate);
+        const formattedDate = appointmentDate.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+        });
+
+        const result = await sendAppointmentReminderNotification(customerId, {
+            serviceName,
+            vendorName,
+            date: formattedDate,
+            time: appointment.startTime,
+            appointmentId: appointment._id.toString(),
+            reminderType, // Include type so notification can be customized
+        });
+
+        if (result.success) {
+            logger.info(`${reminderType} reminder sent for appointment ${appointment._id} to customer ${customer.firstName || customer.email || customerId}`);
+            return true;
+        } else {
+            logger.warn(`Failed to send ${reminderType} reminder for appointment ${appointment._id}: ${result.error}`);
+            return false;
+        }
+    } catch (error: any) {
+        logger.error(`Error sending reminder for appointment ${appointment._id}: ${error.message}`);
+        return false;
     }
 }
 
@@ -100,11 +228,6 @@ export async function autoCompleteAppointments(): Promise<void> {
             appointmentDate: { $lte: yesterday },
             status: 'confirmed'
         }).lean();
-
-        if (pastConfirmedAppointments.length === 0) {
-            logger.info('No past confirmed appointments to auto-complete');
-            return;
-        }
 
         // Also check for confirmed appointments from today where end time has passed
         const todayStart = new Date(now);
@@ -154,102 +277,14 @@ export async function autoCompleteAppointments(): Promise<void> {
 
         logger.info(`Auto-completed ${result.modifiedCount} appointments`);
 
-        // TODO: Send notifications to customers about completed appointments
-        // This can be added later when push notifications are fully implemented
-
     } catch (error: any) {
         logger.error(`Error in auto-complete scheduler: ${error.message}`);
     }
 }
 
 /**
- * Find upcoming appointments within a time window
- */
-async function findUpcomingAppointments(startTime: Date, endTime: Date): Promise<any[]> {
-    try {
-        // Get today's date at start
-        const startDate = new Date(startTime);
-        startDate.setHours(0, 0, 0, 0);
-
-        const endDate = new Date(endTime);
-        endDate.setHours(23, 59, 59, 999);
-
-        const appointments = await Appointment.find({
-            appointmentDate: {
-                $gte: startDate,
-                $lte: endDate
-            },
-            status: { $in: ['confirmed', 'pending'] }
-        })
-        .populate('customerId', '_id clerkId firstName lastName expoPushToken')
-        .populate({
-            path: 'vendorServiceId',
-            populate: [
-                { path: 'vendorId', select: 'vendorName' },
-                { path: 'serviceId', select: 'name' }
-            ]
-        })
-        .lean();
-
-        // Filter by time
-        return appointments.filter(apt => {
-            if (!apt.startTime) return false;
-
-            const [hours, minutes] = apt.startTime.split(':').map(Number);
-            const aptDateTime = new Date(apt.appointmentDate);
-            aptDateTime.setHours(hours, minutes, 0, 0);
-
-            return aptDateTime >= startTime && aptDateTime <= endTime;
-        });
-    } catch (error: any) {
-        logger.error(`Error finding upcoming appointments: ${error.message}`);
-        return [];
-    }
-}
-
-/**
- * Send reminder notification for a specific appointment
- */
-async function sendReminderForAppointment(appointment: any, reminderType: '24h' | '1h'): Promise<void> {
-    try {
-        const customerId = appointment.customerId?._id?.toString();
-        if (!customerId) {
-            logger.warn(`No customer ID for appointment ${appointment._id}`);
-            return;
-        }
-
-        const vendorService = appointment.vendorServiceId;
-        const serviceName = vendorService?.serviceId?.name || vendorService?.name || 'your service';
-        const vendorName = vendorService?.vendorId?.vendorName;
-
-        const appointmentDate = new Date(appointment.appointmentDate);
-        const formattedDate = appointmentDate.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-        });
-
-        const result = await sendAppointmentReminderNotification(customerId, {
-            serviceName,
-            vendorName,
-            date: formattedDate,
-            time: appointment.startTime,
-            appointmentId: appointment._id.toString(),
-        });
-
-        if (result.success) {
-            logger.info(`${reminderType} reminder sent for appointment ${appointment._id}`);
-        } else {
-            logger.warn(`Failed to send ${reminderType} reminder for appointment ${appointment._id}: ${result.error}`);
-        }
-    } catch (error: any) {
-        logger.error(`Error sending reminder for appointment ${appointment._id}: ${error.message}`);
-    }
-}
-
-/**
  * Start the reminder scheduler
- * Runs every 5 minutes
+ * Runs every 5 minutes to check for reminders
  */
 export function startReminderScheduler(): void {
     logger.info('Starting appointment scheduler...');
@@ -275,7 +310,7 @@ export function startReminderScheduler(): void {
 export async function sendManualReminder(appointmentId: string): Promise<{ success: boolean; message: string }> {
     try {
         const appointment = await Appointment.findById(appointmentId)
-            .populate('customerId', '_id clerkId firstName lastName expoPushToken')
+            .populate('customerId', '_id clerkId firstName lastName expoPushToken email')
             .populate({
                 path: 'vendorServiceId',
                 populate: [
@@ -293,8 +328,12 @@ export async function sendManualReminder(appointmentId: string): Promise<{ succe
             return { success: false, message: 'Cannot send reminder for cancelled appointment' };
         }
 
-        await sendReminderForAppointment(appointment, '1h');
-        return { success: true, message: 'Reminder sent successfully' };
+        const sent = await sendReminderForAppointment(appointment, '1h');
+        if (sent) {
+            return { success: true, message: 'Reminder sent successfully' };
+        } else {
+            return { success: false, message: 'Failed to send reminder - check if customer has push token' };
+        }
     } catch (error: any) {
         logger.error(`Error sending manual reminder: ${error.message}`);
         return { success: false, message: error.message };
