@@ -435,6 +435,76 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
             }
         });
 
+    } else if (req.body.type == 'get-cancellation-policy') {
+        // Get cancellation policy preview (refund amount before confirming)
+        delete req.body.type;
+        const { appointmentId } = req.body;
+
+        const appointment = await Appointment.findById(appointmentId);
+
+        if (!appointment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Appointment not found'
+            });
+        }
+
+        // Calculate hours until appointment
+        const appointmentDateTime = new Date(appointment.appointmentDate);
+        if (appointment.startTime) {
+            const [hours, minutes] = appointment.startTime.split(':').map(Number);
+            appointmentDateTime.setHours(hours, minutes, 0, 0);
+        }
+        const hoursUntilAppointment = (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+
+        // Refund policy thresholds
+        let refundPercentage = 0;
+        let policyMessage = '';
+        let policyTier = '';
+
+        if (hoursUntilAppointment >= 24) {
+            refundPercentage = 100;
+            policyMessage = 'Full refund - You are cancelling more than 24 hours before the appointment.';
+            policyTier = 'full';
+        } else if (hoursUntilAppointment >= 12) {
+            refundPercentage = 75;
+            policyMessage = '75% refund - You are cancelling 12-24 hours before the appointment.';
+            policyTier = 'partial_75';
+        } else if (hoursUntilAppointment >= 2) {
+            refundPercentage = 50;
+            policyMessage = '50% refund - You are cancelling 2-12 hours before the appointment.';
+            policyTier = 'partial_50';
+        } else {
+            refundPercentage = 0;
+            policyMessage = 'No refund - Cancellations less than 2 hours before the appointment are not eligible for refund.';
+            policyTier = 'no_refund';
+        }
+
+        const originalAmount = appointment.total || 0;
+        const refundAmount = (originalAmount * refundPercentage) / 100;
+        const nonRefundableAmount = originalAmount - refundAmount;
+
+        res.status(200).json({
+            success: true,
+            cancellationPolicy: {
+                hoursUntilAppointment: Math.max(0, hoursUntilAppointment).toFixed(1),
+                refundPercentage,
+                policyTier,
+                policyMessage,
+                originalAmount,
+                refundAmount,
+                nonRefundableAmount,
+                paymentMethod: appointment.paymentMode,
+                isEligibleForRefund: refundPercentage > 0 && appointment.paymentIntentId && appointment.paymentStatus === 'completed'
+            },
+            policyDetails: [
+                { threshold: '24+ hours', refund: '100%', description: 'Full refund' },
+                { threshold: '12-24 hours', refund: '75%', description: 'Partial refund' },
+                { threshold: '2-12 hours', refund: '50%', description: 'Partial refund' },
+                { threshold: 'Less than 2 hours', refund: '0%', description: 'No refund' }
+            ]
+        });
+
     } else if (req.body.type == 'cancel-appointment') {
         delete req.body.type;
         const { appointmentId, cancellationReason } = req.body;
@@ -464,27 +534,65 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
             });
         }
 
+        // Calculate hours until appointment for refund policy
+        const appointmentDateTime = new Date(appointment.appointmentDate);
+        if (appointment.startTime) {
+            const [hours, minutes] = appointment.startTime.split(':').map(Number);
+            appointmentDateTime.setHours(hours, minutes, 0, 0);
+        }
+        const hoursUntilAppointment = (appointmentDateTime.getTime() - Date.now()) / (1000 * 60 * 60);
+
+        // Refund policy thresholds (industry standard)
+        // 24+ hours: 100% refund
+        // 12-24 hours: 75% refund
+        // 2-12 hours: 50% refund
+        // Less than 2 hours: No refund (0%)
+        let refundPercentage = 0;
+        let refundPolicyMessage = '';
+
+        if (hoursUntilAppointment >= 24) {
+            refundPercentage = 100;
+            refundPolicyMessage = 'Full refund (cancelled 24+ hours before appointment)';
+        } else if (hoursUntilAppointment >= 12) {
+            refundPercentage = 75;
+            refundPolicyMessage = '75% refund (cancelled 12-24 hours before appointment)';
+        } else if (hoursUntilAppointment >= 2) {
+            refundPercentage = 50;
+            refundPolicyMessage = '50% refund (cancelled 2-12 hours before appointment)';
+        } else {
+            refundPercentage = 0;
+            refundPolicyMessage = 'No refund (cancelled less than 2 hours before appointment)';
+        }
+
         let refundResult = null;
 
-        // Process refund if payment was made via credit card
-        if (appointment.paymentIntentId && appointment.paymentStatus === 'completed') {
+        // Process refund if payment was made via credit card and refund percentage > 0
+        if (appointment.paymentIntentId && appointment.paymentStatus === 'completed' && refundPercentage > 0) {
             try {
-                // Full refund
-                const refund = await StripeService.refundPayment(appointment.paymentIntentId);
+                const refundAmount = (appointment.total * refundPercentage) / 100;
+
+                // Pass amount for partial refund, undefined for full refund
+                const refund = await StripeService.refundPayment(
+                    appointment.paymentIntentId,
+                    refundPercentage < 100 ? refundAmount : undefined
+                );
 
                 refundResult = {
                     refundId: refund.id,
                     refundStatus: refund.status,
-                    refundAmount: refund.amount ? refund.amount / 100 : appointment.total
+                    refundAmount: refund.amount ? refund.amount / 100 : refundAmount,
+                    refundPercentage,
+                    originalAmount: appointment.total,
+                    policyMessage: refundPolicyMessage
                 };
 
                 // Update appointment with refund info
                 appointment.refundId = refund.id;
                 appointment.refundStatus = (refund.status as 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled') || 'pending';
-                appointment.refundAmount = refund.amount ? refund.amount / 100 : appointment.total;
-                appointment.paymentStatus = 'refunded';
+                appointment.refundAmount = refund.amount ? refund.amount / 100 : refundAmount;
+                appointment.paymentStatus = refundPercentage === 100 ? 'refunded' : 'partially_refunded';
 
-                logger.info(`Refund processed for appointment ${appointmentId}: ${refund.id}`);
+                logger.info(`Refund processed for appointment ${appointmentId}: ${refund.id} (${refundPercentage}% = $${refundAmount.toFixed(2)})`);
             } catch (refundError: any) {
                 logger.error(`Refund failed for appointment ${appointmentId}: ${refundError.message}`);
                 return res.status(500).json({
@@ -493,6 +601,17 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
                     error: refundError.message
                 });
             }
+        } else if (appointment.paymentIntentId && appointment.paymentStatus === 'completed' && refundPercentage === 0) {
+            // No refund due to late cancellation
+            refundResult = {
+                refundId: null,
+                refundStatus: 'not_eligible',
+                refundAmount: 0,
+                refundPercentage: 0,
+                originalAmount: appointment.total,
+                policyMessage: refundPolicyMessage
+            };
+            logger.info(`No refund for appointment ${appointmentId} - cancelled less than 2 hours before`);
         }
 
         // Update appointment status
@@ -512,9 +631,14 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
 
         res.status(200).json({
             success: true,
-            message: refundResult ? 'Appointment cancelled and refund initiated' : 'Appointment cancelled successfully',
+            message: refundResult ? `Appointment cancelled. ${refundResult.policyMessage}` : 'Appointment cancelled successfully',
             data: updatedAppointment,
-            refund: refundResult
+            refund: refundResult,
+            cancellationPolicy: {
+                hoursUntilAppointment: Math.max(0, hoursUntilAppointment).toFixed(1),
+                refundPercentage,
+                policyMessage: refundPolicyMessage
+            }
         });
 
     } else if (req.body.type == 'mark-missed') {
@@ -610,9 +734,24 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
         });
 
     } else {
-        // Get appointments
+        // Get appointments (list operation)
         delete req.body.type;
-        const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
+
+        // Extract sort parameter, default to descending by appointmentDate (latest first)
+        const sort = req.body.sort || { appointmentDate: -1 };
+        delete req.body.sort;
+
+        const appointments = await Appointment.find(req.body)
+            .populate('customerId')
+            .populate({
+                path: 'vendorServiceId',
+                populate: {
+                    path: 'vendorId',
+                    select: 'vendorName name phone email address'
+                }
+            })
+            .sort(sort);
+
         res.status(200).json({
             success: true,
             count: appointments.length,

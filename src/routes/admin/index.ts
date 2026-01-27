@@ -19,6 +19,7 @@ import analyticsRoutes from './analytics.routes';
 import cacheRoutes from './cache.routes';
 import auditLogRoutes from './audit-log.routes';
 import reportsRoutes from './reports.routes';
+import promotionRoutes from './promotion.routes';
 import { syncAdmin, getAdminProfile } from '../../controllers/admin-portal.controller';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 
@@ -51,5 +52,6 @@ router.use('/monthly-service', monthlyServiceRoutes);
 router.use('/users', userRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/slot-locks', slotLockRoutes);
+router.use('/promotions', promotionRoutes);
 
 export default router;
