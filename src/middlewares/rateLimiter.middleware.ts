@@ -3,17 +3,26 @@ import { Request, Response } from 'express';
 
 /**
  * Rate limiter for general API requests
- * Allows 500 requests per 15 minutes per IP (increased for development)
+ * Allows 2000 requests per 15 minutes per IP in development (for testing)
+ * Allows 100 requests per 15 minutes per IP in production
  */
 export const generalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 500, // Higher limit for development
+    max: process.env.NODE_ENV === 'production' ? 100 : 2000, // Much higher limit for development
     message: {
         success: false,
         message: 'Too many requests from this IP, please try again after 15 minutes'
     },
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    skip: (req: Request) => {
+        // Skip rate limiting in development for localhost
+        if (process.env.NODE_ENV !== 'production') {
+            const ip = req.ip || req.socket.remoteAddress || '';
+            return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+        }
+        return false;
+    },
 });
 
 /**

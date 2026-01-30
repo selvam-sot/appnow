@@ -37,11 +37,24 @@ export const createReview = asyncHandler(async (req: Request, res: Response) => 
         });
     }
 
-    // Check if appointment is completed
-    if (appointment.status !== 'completed' && appointment.status !== 'confirmed') {
+    // Check if appointment is not cancelled
+    if (appointment.status === 'cancelled') {
         return res.status(400).json({
             success: false,
-            message: 'You can only review completed appointments'
+            message: 'You cannot review cancelled appointments'
+        });
+    }
+
+    // Check if appointment end time has passed
+    const appointmentDate = new Date(appointment.appointmentDate);
+    const [endHours, endMinutes] = appointment.endTime.split(':').map(Number);
+    const appointmentEndDateTime = new Date(appointmentDate);
+    appointmentEndDateTime.setHours(endHours, endMinutes, 0, 0);
+
+    if (appointmentEndDateTime > new Date()) {
+        return res.status(400).json({
+            success: false,
+            message: 'You can only review appointments after they have ended'
         });
     }
 
@@ -332,12 +345,26 @@ export const canReviewAppointment = asyncHandler(async (req: Request, res: Respo
         });
     }
 
-    // Check status
-    if (appointment.status !== 'completed' && appointment.status !== 'confirmed') {
+    // Check status - must not be cancelled
+    if (appointment.status === 'cancelled') {
         return res.status(200).json({
             success: true,
             canReview: false,
-            reason: 'Appointment not completed'
+            reason: 'Appointment was cancelled'
+        });
+    }
+
+    // Check if appointment end time has passed
+    const appointmentDate = new Date(appointment.appointmentDate);
+    const [endHours, endMinutes] = appointment.endTime.split(':').map(Number);
+    const appointmentEndDateTime = new Date(appointmentDate);
+    appointmentEndDateTime.setHours(endHours, endMinutes, 0, 0);
+
+    if (appointmentEndDateTime > new Date()) {
+        return res.status(200).json({
+            success: true,
+            canReview: false,
+            reason: 'Appointment has not ended yet'
         });
     }
 
