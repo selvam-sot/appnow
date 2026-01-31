@@ -261,10 +261,10 @@ export const getVendorServiceSlotsByDate = asyncHandler(async (req: Request, res
         const serviceSlotsByDate: Record<string, Slot[]> = {};
 
         // Build month/year conditions for next 3 months in a single query
+        // Use first day of month to avoid date overflow (e.g., Jan 31 + 1 month = Mar 3, skipping Feb)
         const monthYearConditions = [];
         for (let i = 0; i < 3; i++) {
-            const searchDate = new Date(startDate);
-            searchDate.setMonth(searchDate.getMonth() + i);
+            const searchDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
             monthYearConditions.push({
                 month: searchDate.getMonth() + 1,
                 year: searchDate.getFullYear()
