@@ -124,3 +124,98 @@ export const getServiceSlotsByDate = asyncHandler(async (req: Request, res: Resp
         });
     }
 });
+
+/**
+ * Find nearby dates that have available slots for a given serviceId.
+ * Logic:
+ *   - At most 1 date before the selected date (immediate previous with slots, >= today)
+ *   - Fill remaining after dates to reach ~10 total
+ *   - If no before date, return 10 after dates
+ *
+ * Examples (today = Feb 14, selected = Feb 16, no slot):
+ *   - Feb 15 has slots → [Feb 15, Feb 17, Feb 18, ... up to 10 total]
+ *   - Feb 15 has no slots → [Feb 17, Feb 18, ... up to 10 total]
+ */
+export const getNearbyAvailableDates = asyncHandler(async (req: Request, res: Response) => {
+    const { serviceId, date } = req.body;
+    const targetDate = moment(date).startOf('day');
+    const today = moment().startOf('day');
+    const totalNeeded = 10;
+
+    try {
+        // Step 1: Find all vendor services for this service
+        const vendorServices = await VendorService.find({
+            serviceId: new mongoose.Types.ObjectId(serviceId)
+        });
+
+        if (vendorServices.length === 0) {
+            res.status(200).json({ success: true, data: [] });
+            return;
+        }
+
+        const vendorServiceIds = vendorServices.map(vs => vs._id);
+
+        // Step 2: Search window — 1 day before (clamped to today) to 60 days after
+        const searchStart = moment.max(today, moment(targetDate).subtract(1, 'day'));
+        const searchEnd = moment(targetDate).add(60, 'days');
+
+        // Step 3: Build month/year conditions covering the search range
+        const monthYearConditions = [];
+        const cursor = moment(searchStart).startOf('month');
+        while (cursor.isSameOrBefore(searchEnd)) {
+            monthYearConditions.push({
+                month: cursor.month() + 1,
+                year: cursor.year()
+            });
+            cursor.add(1, 'month');
+        }
+
+        // Step 4: Query VendorServiceSlot for all vendor services in the range
+        const allSlotDocs = await VendorServiceSlot.find({
+            vendorServiceId: { $in: vendorServiceIds },
+            $or: monthYearConditions,
+        }).lean();
+
+        // Step 5: Collect unique dates that have timing entries
+        const datesWithSlots = new Set<string>();
+
+        for (const slotDoc of allSlotDocs) {
+            for (const dateDetails of (slotDoc as any).dates) {
+                const dateObj = moment(dateDetails.date).startOf('day');
+                if (dateObj.isSameOrAfter(searchStart) &&
+                    dateObj.isSameOrBefore(searchEnd) &&
+                    dateObj.isSameOrAfter(today) &&
+                    !dateObj.isSame(targetDate, 'day') &&
+                    dateDetails.timings && dateDetails.timings.length > 0) {
+                    datesWithSlots.add(dateObj.format('YYYY-MM-DD'));
+                }
+            }
+        }
+
+        // Step 6: Sort, pick 1 before + fill after to reach totalNeeded
+        const sortedDates = Array.from(datesWithSlots).sort();
+
+        // At most 1 date before (the closest one before selected date)
+        const beforeDates = sortedDates.filter(d => moment(d).isBefore(targetDate));
+        const beforeDate = beforeDates.length > 0 ? [beforeDates[beforeDates.length - 1]] : [];
+
+        // After dates: fill remaining to reach totalNeeded
+        const afterNeeded = totalNeeded - beforeDate.length;
+        const afterDates = sortedDates
+            .filter(d => moment(d).isAfter(targetDate))
+            .slice(0, afterNeeded);
+
+        const nearbyDates = [...beforeDate, ...afterDates];
+
+        res.status(200).json({
+            success: true,
+            data: nearbyDates,
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+    }
+});
