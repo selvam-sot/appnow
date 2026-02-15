@@ -17,6 +17,7 @@ import notificationRoutes from './notification.routes';
 import reviewRoutes from '../review.routes';
 import slotLockRoutes from './slot-lock.routes';
 import promotionRoutes from './promotion.routes';
+import homeRoutes from './home.routes';
 
 
 const router = Router();
@@ -38,6 +39,7 @@ router.use('/settings', settingsRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/slot-locks', slotLockRoutes);
 router.use('/promotions', promotionRoutes);
+router.use('/home', homeRoutes);
 
 
 export default router;
