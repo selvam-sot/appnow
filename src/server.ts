@@ -4,145 +4,67 @@ import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
 import { connectToDatabase } from './config/database';
-import winston from 'winston';
+import logger from './config/logger';
+import corsOptions from './config/cors';
 import { generalLimiter } from './middlewares/rateLimiter.middleware';
 import { xssSanitize } from './middlewares/sanitize.middleware';
 import { setupSwagger } from './config/swagger';
 import { auditAdmin, auditAllMutations } from './middlewares/audit.middleware';
+import adminRoutes from './routes/admin';
+import userRoutes from './routes/user';
+import vendorRoutes from './routes/vendor';
+import { startNotificationScheduler } from './services/notification-scheduler.service';
+import { autoCompleteAppointments } from './services/scheduler.service';
 
-// Configure logger
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message }) => {
-      return `${timestamp} ${level}: ${message}`;
-    })
-  ),
-  transports: [
-    new winston.transports.Console()
-  ],
-});
-
-// Initialize express app
 const app = express();
-
-// Connect to database
 connectToDatabase();
 
 // Middleware
-app.use(express.json({ limit: '10kb' })); // Limit body size
-
-const corsOptions = {
-  origin: [
-    'http://localhost:8081',
-    'http://192.168.0.88:8081',
-    'exp://192.168.0.88:8081',
-    'http://192.168.0.88:3000',
-    'http://localhost:3000',
-    'http://localhost:3001', // Admin panel
-    'http://localhost:8082', // Vendor app
-    'http://192.168.0.88:8082',
-    'exp://192.168.0.88:8082',
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-};
+app.use(express.json({ limit: '10kb' }));
 app.use(cors(corsOptions));
-
-// Security middleware
-app.use(helmet()); // Set security HTTP headers
-// Note: express-mongo-sanitize removed due to Node.js 20+ making req.query read-only
-// Our xssSanitize middleware handles NoSQL injection prevention by filtering $ operators
-app.use(hpp()); // Prevent HTTP Parameter Pollution
-app.use(xssSanitize); // Sanitize user input against XSS and NoSQL injection
-
-// Rate limiting - apply to all API routes (only in production)
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api/', generalLimiter);
-}
-// In development, rate limiting is disabled for faster testing
-
-// Request logging middleware
+app.use(helmet());
+app.use(hpp());
+app.use(xssSanitize);
+if (process.env.NODE_ENV === 'production') app.use('/api/', generalLimiter);
 app.use((req: Request, _res: Response, next: NextFunction) => {
   logger.info(`${req.method} ${req.originalUrl}`);
   next();
 });
 
-// Routes
-app.get('/', (_req: Request, res: Response) => {
-  res.json({ 
-    message: 'Welcome to Appointment Management System',
-    status: 'Server is running',
-    version: '1.0.0'
-  });
-});
-
+// Health check
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ 
-    message: 'Application running in health condition',
-    status: 'Server is running',
-    version: '1.0.0'
-  });
+  res.json({ status: 'ok' });
 });
 
-// Setup Swagger API documentation
+// Swagger
 setupSwagger(app);
-logger.info('Swagger documentation available at /api-docs');
 
 // API routes
-try {
-  const adminRoutes = require('./routes/admin').default;
-  const userRoutes = require('./routes/user').default;
-  const vendorRoutes = require('./routes/vendor').default;
+app.use('/api/v1/admin', auditAdmin, adminRoutes);
+app.use('/api/v1/customer', auditAllMutations, userRoutes);
+app.use('/api/v1/vendor', auditAllMutations, vendorRoutes);
 
-  // Apply audit logging to admin routes (all methods)
-  app.use('/api/v1/admin', auditAdmin, adminRoutes);
+// Schedulers
+startNotificationScheduler();
+autoCompleteAppointments();
+setInterval(autoCompleteAppointments, 15 * 60 * 1000);
 
-  // Apply audit logging to customer routes (mutations only)
-  app.use('/api/v1/customer', auditAllMutations, userRoutes);
-
-  // Apply audit logging to vendor routes (mutations only)
-  app.use('/api/v1/vendor', auditAllMutations, vendorRoutes);
-
-  logger.info('Routes loaded successfully');
-
-  // Start notification scheduler (smart scheduling approach)
-  const { startNotificationScheduler } = require('./services/notificationScheduler.service');
-  startNotificationScheduler();
-
-  // Start auto-complete scheduler for past appointments
-  const { autoCompleteAppointments } = require('./services/scheduler.service');
-  autoCompleteAppointments();
-  // Run auto-complete every 15 minutes
-  setInterval(() => {
-    autoCompleteAppointments();
-  }, 15 * 60 * 1000);
-} catch (error) {
-  logger.error('Error loading routes:', error);
-}
-
-// Error handling middleware
+// Error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error(`Error: ${err.message}`);
   res.status(500).json({
     success: false,
     error: 'Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
   });
 });
 
-// Handle 404 routes
+// 404 handler
 app.use((_req: Request, res: Response) => {
-  res.status(404).json({
-    success: false,
-    error: 'Not Found',
-    message: 'The requested resource was not found on this server'
-  });
+  res.status(404).json({ success: false, error: 'Not Found' });
 });
 
-// Start server
+// Start
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);

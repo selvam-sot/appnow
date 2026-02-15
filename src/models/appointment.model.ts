@@ -135,6 +135,12 @@ const AppointmentSchema: Schema = new Schema({
     },
     reminder1hSentAt: {
         type: Date
+    },
+    reminder2hSentAt: {
+        type: Date
+    },
+    reminderPostSentAt: {
+        type: Date
     }
 }, {
     // Match the exact field names and structure from the database

@@ -23,6 +23,9 @@ export interface IUser extends Document {
     // Push Notification
     expoPushToken?: string;
 
+    // Stripe
+    stripeCustomerId?: string;
+
     // Contact
     phone?: string;
     

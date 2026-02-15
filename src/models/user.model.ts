@@ -72,7 +72,12 @@ const UserSchema: Schema = new Schema({
     expoPushToken: {
         type: String,
         sparse: true
-    }
+    },
+    stripeCustomerId: {
+        type: String,
+        sparse: true,
+        index: true,
+    },
 }, { 
     // Match the exact field names and structure from the database
     timestamps: {

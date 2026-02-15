@@ -50,14 +50,29 @@ export const deleteService = asyncHandler(async (req: Request, res: Response) =>
 
 export const getServiceList = asyncHandler(async (req: Request, res: Response) => {
     try {
-        if ('name' in req.body) {
-            //req.body.name = new RegExp(`^${req.body.name.toLowerCase()}$`, 'i');
-            req.body.name = new RegExp(req.body.name.toLowerCase(), 'i');
+        // Whitelist allowed query fields to prevent NoSQL injection
+        const allowedFields = ['isActive', 'categoryId', 'subCategoryId'];
+        const filter: Record<string, any> = {};
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                filter[field] = req.body[field];
+            }
         }
-        //req.body = {...req.body, ...{ isActive: true }};
-        const services = await Service.find(req.body).sort({name: 1});
-        console.log("Service req body:", req.body, services.length);
-        
+
+        // Safely handle name search with escaped RegExp to prevent ReDoS
+        if (req.body.name && typeof req.body.name === 'string') {
+            const escaped = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.name = new RegExp(escaped, 'i');
+        }
+
+        // Apply limit if provided
+        let query = Service.find(filter).sort({ name: 1 });
+        if (req.body.limit && Number.isInteger(Number(req.body.limit))) {
+            query = query.limit(Math.min(Number(req.body.limit), 100));
+        }
+
+        const services = await query;
+
         res.status(200).json({
             success: true,
             count: services.length,
@@ -67,7 +82,6 @@ export const getServiceList = asyncHandler(async (req: Request, res: Response) =
         res.status(500).json({
             success: false,
             error: 'Server Error',
-            message: error instanceof Error ? error.message : 'Unknown error occurred',
         });
     }
 });

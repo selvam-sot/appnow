@@ -6,7 +6,7 @@
 
 import Appointment from '../models/appointment.model';
 import VendorService from '../models/vendor-service.model';
-import { sendAppointmentReminderNotification } from './pushNotification.service';
+import { sendAppointmentReminderNotification } from './push-notification.service';
 import logger from '../config/logger';
 
 // Track last auto-complete run to avoid running too frequently

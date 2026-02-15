@@ -17,12 +17,6 @@ const getAppointmentsByDate = async (
     startDate: Date,
     endDate: Date
 ): Promise<Record<string, AppointmentInterface[]>> => {
-    console.log('[getAppointmentsByDate] Query params:', {
-        vendorServiceId,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString()
-    });
-
     const appointments = await Appointment.find({
         vendorServiceId,
         appointmentDate: {
@@ -31,11 +25,6 @@ const getAppointmentsByDate = async (
         },
         status: { $nin: ['cancelled'] } // Exclude cancelled appointments
     }).lean();
-
-    console.log('[getAppointmentsByDate] Found appointments:', appointments.length);
-    if (appointments.length > 0) {
-        console.log('[getAppointmentsByDate] Sample appointment:', JSON.stringify(appointments[0], null, 2));
-    }
 
     // Group appointments by date and time slot
     const appointmentsByDate: Record<string, AppointmentInterface[]> = {};
@@ -65,7 +54,6 @@ const getAppointmentsByDate = async (
         }
     }
 
-    console.log('[getAppointmentsByDate] Grouped result:', JSON.stringify(appointmentsByDate, null, 2));
     return appointmentsByDate;
 };
 

@@ -9,7 +9,9 @@ import {
     confirmWithMethod,
     confirmWithCard,
     createCheckoutSession,
-    getPaymentHistory
+    getPaymentHistory,
+    getSavedPaymentMethods,
+    deleteSavedPaymentMethod
 } from '../../controllers/payment.controller';
 import { paymentLimiter } from '../../middlewares/rateLimiter.middleware';
 
@@ -75,5 +77,9 @@ router.post('/create-checkout-session', [
 
 // Get payment history
 router.get('/history', getPaymentHistory);
+
+// Saved payment methods
+router.get('/saved-methods/:clerkId', paymentLimiter, getSavedPaymentMethods);
+router.delete('/saved-methods/:paymentMethodId', paymentLimiter, deleteSavedPaymentMethod);
 
 export default router;

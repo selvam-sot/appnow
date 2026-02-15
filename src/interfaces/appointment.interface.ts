@@ -48,6 +48,8 @@ export interface IAppointment {
     // Reminder tracking fields
     reminder24hSentAt?: Date;
     reminder1hSentAt?: Date;
+    reminder2hSentAt?: Date;
+    reminderPostSentAt?: Date;
     // Timestamps
     createdAt?: Date;
     updatedAt?: Date;

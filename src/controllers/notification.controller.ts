@@ -112,7 +112,6 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
     if (notificationsToSave.length > 0) {
         try {
             await Notification.insertMany(notificationsToSave);
-            console.log(`Saved ${notificationsToSave.length} notifications to database`);
         } catch (dbError) {
             console.error('Error saving notifications to database:', dbError);
             // Continue with push notifications even if DB save fails
@@ -179,10 +178,7 @@ export const sendNotification = asyncHandler(async (req: Request, res: Response)
 export const registerPushToken = asyncHandler(async (req: Request, res: Response) => {
     const { userId, clerkId, pushToken } = req.body;
 
-    console.log('[registerPushToken] Request received:', { userId, clerkId, pushToken: pushToken?.substring(0, 30) + '...' });
-
     if ((!userId && !clerkId) || !pushToken) {
-        console.log('[registerPushToken] Missing required fields');
         return res.status(400).json({
             success: false,
             message: 'User ID (or clerkId) and push token are required',
@@ -191,7 +187,6 @@ export const registerPushToken = asyncHandler(async (req: Request, res: Response
 
     // Validate Expo push token format
     if (!pushToken.startsWith('ExponentPushToken')) {
-        console.log('[registerPushToken] Invalid token format');
         return res.status(400).json({
             success: false,
             message: 'Invalid Expo push token format',
@@ -201,32 +196,26 @@ export const registerPushToken = asyncHandler(async (req: Request, res: Response
     // Find user by clerkId or MongoDB _id
     let user;
     if (clerkId) {
-        console.log('[registerPushToken] Looking up user by clerkId:', clerkId);
         user = await User.findOneAndUpdate(
             { clerkId },
             { expoPushToken: pushToken },
             { new: true }
         );
-        console.log('[registerPushToken] User found by clerkId:', user ? user.email : 'NOT FOUND');
     } else {
-        console.log('[registerPushToken] Looking up user by userId:', userId);
         user = await User.findByIdAndUpdate(
             userId,
             { expoPushToken: pushToken },
             { new: true }
         );
-        console.log('[registerPushToken] User found by userId:', user ? user.email : 'NOT FOUND');
     }
 
     if (!user) {
-        console.log('[registerPushToken] User not found for clerkId:', clerkId, 'or userId:', userId);
         return res.status(404).json({
             success: false,
             message: 'User not found',
         });
     }
 
-    console.log('[registerPushToken] Push token saved successfully for user:', user.email);
     res.status(200).json({
         success: true,
         message: 'Push token registered successfully',

@@ -38,8 +38,6 @@ export const getUserSettings = asyncHandler(async (req: Request, res: Response) 
             userId: user?._id,
             ...DEFAULT_SETTINGS
         });
-
-        console.log(`Created default settings for user: ${clerkId}`);
     }
 
     res.status(200).json({

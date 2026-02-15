@@ -105,7 +105,6 @@ export async function sendNotificationToUser(options: SendNotificationOptions): 
                     read: false,
                 });
                 result.savedToDb = true;
-                console.log(`[PushNotification] Saved notification to DB for user ${userClerkId}`);
             } catch (dbError) {
                 console.error('[PushNotification] Error saving notification to DB:', dbError);
             }
@@ -125,12 +124,9 @@ export async function sendNotificationToUser(options: SendNotificationOptions): 
 
             if (tickets.length > 0 && tickets[0].status === 'ok') {
                 result.pushSent = true;
-                console.log(`[PushNotification] Push notification sent to user ${userClerkId}`);
             } else if (tickets.length > 0) {
                 console.error('[PushNotification] Push notification failed:', tickets[0].message);
             }
-        } else {
-            console.log(`[PushNotification] User ${userClerkId} has no valid push token`);
         }
 
         result.success = result.savedToDb || result.pushSent;

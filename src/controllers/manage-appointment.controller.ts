@@ -7,7 +7,15 @@ import { AppError } from './../utils/appError.util';
 import { asyncHandler } from './../utils/asyncHandler.util';
 
 export const getAppointments = asyncHandler(async (req: Request, res: Response) => {
-    const appointments = await Appointment.find(req.body).populate('customerId').populate('vendorServiceId');
+    // Whitelist allowed query fields to prevent NoSQL injection
+    const allowedFields = ['customerId', 'vendorServiceId', 'status', 'appointmentDate'];
+    const filter: Record<string, any> = {};
+    for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+            filter[field] = req.body[field];
+        }
+    }
+    const appointments = await Appointment.find(filter).populate('customerId').populate('vendorServiceId');
     res.json(appointments);
 });
 

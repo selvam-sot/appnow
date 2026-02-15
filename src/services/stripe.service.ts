@@ -19,7 +19,6 @@ export interface CustomerData {
 export class StripeService {
     static async createPaymentIntent(data: PaymentIntentData): Promise<Stripe.PaymentIntent> {
         try {
-            console.log("Key:", process.env.STRIPE_SECRET_KEY!)
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: Math.round(data.amount), // Convert to cents
                 currency: data.currency || 'usd',
@@ -66,9 +65,7 @@ export class StripeService {
     // }
 
     static async confirmPaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
-        console.log("confirmPayment2")
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-        console.log("confirmPayment3")
         return paymentIntent;
     }
 
@@ -156,6 +153,40 @@ export class StripeService {
             logger.error(`Error confirming payment with card: ${error.message}`);
             throw new Error(`Failed to confirm payment: ${error.message}`);
         }
+    }
+
+    static async createEphemeralKey(customerId: string): Promise<Stripe.EphemeralKey> {
+        try {
+            const ephemeralKey = await stripe.ephemeralKeys.create(
+                { customer: customerId },
+                { apiVersion: '2024-06-20' }
+            );
+            logger.info(`Ephemeral key created for customer ${customerId}`);
+            return ephemeralKey;
+        } catch (error: any) {
+            logger.error(`Error creating ephemeral key: ${error.message}`);
+            throw new Error(`Failed to create ephemeral key: ${error.message}`);
+        }
+    }
+
+    static async listPaymentMethods(customerId: string) {
+        const paymentMethods = await stripe.paymentMethods.list({
+            customer: customerId,
+            type: 'card',
+        });
+        return paymentMethods.data;
+    }
+
+    static async attachPaymentMethod(customerId: string, paymentMethodId: string) {
+        const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
+            customer: customerId,
+        });
+        return paymentMethod;
+    }
+
+    static async detachPaymentMethod(paymentMethodId: string) {
+        const paymentMethod = await stripe.paymentMethods.detach(paymentMethodId);
+        return paymentMethod;
     }
 
     static async createCheckoutSession(data: {

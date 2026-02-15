@@ -18,6 +18,9 @@ import reviewRoutes from '../review.routes';
 import slotLockRoutes from './slot-lock.routes';
 import promotionRoutes from './promotion.routes';
 import homeRoutes from './home.routes';
+import loyaltyRoutes from './loyalty.routes';
+import referralRoutes from './referral.routes';
+import waitlistRoutes from './waitlist.routes';
 
 
 const router = Router();
@@ -40,6 +43,9 @@ router.use('/notifications', notificationRoutes);
 router.use('/slot-locks', slotLockRoutes);
 router.use('/promotions', promotionRoutes);
 router.use('/home', homeRoutes);
+router.use('/loyalty', loyaltyRoutes);
+router.use('/referrals', referralRoutes);
+router.use('/waitlist', waitlistRoutes);
 
 
 export default router;

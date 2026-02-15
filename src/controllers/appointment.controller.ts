@@ -10,20 +10,20 @@ import { asyncHandler } from '../utils/asyncHandler.util';
 import { sendBookingConfirmationEmail } from '../services/email.service';
 import { addEventToCalendar } from '../services/calendar.service';
 import StripeService from '../services/stripe.service';
-import { sendBookingConfirmationNotification } from '../services/pushNotification.service';
+import { sendBookingConfirmationNotification } from '../services/push-notification.service';
 import {
     scheduleAppointmentReminders,
     cancelAppointmentReminders,
     rescheduleAppointmentReminders,
     syncTodaySchedule
-} from '../services/notificationScheduler.service';
+} from '../services/notification-scheduler.service';
+import { notifyWaitlistedUsers } from './waitlist.controller';
 import logger from '../config/logger';
 import mongoose from 'mongoose';
 
 export const createAppointment = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-        console.log("Appointment error:", req.body, errors)
         throw new AppError('Validation Error', 400);
     }
 
@@ -629,6 +629,12 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
             logger.error(`Failed to cancel reminders: ${schedulerError.message}`);
         }
 
+        // Notify waitlisted users about the newly available slot
+        notifyWaitlistedUsers(
+            appointment.vendorServiceId.toString(),
+            appointment.appointmentDate
+        ).catch(() => {}); // Fire and forget
+
         res.status(200).json({
             success: true,
             message: refundResult ? `Appointment cancelled. ${refundResult.policyMessage}` : 'Appointment cancelled successfully',
@@ -741,7 +747,16 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
         const sort = req.body.sort || { appointmentDate: -1 };
         delete req.body.sort;
 
-        const appointments = await Appointment.find(req.body)
+        // Whitelist allowed query fields to prevent NoSQL injection
+        const allowedFields = ['customerId', 'vendorServiceId', 'status', 'appointmentDate', 'startTime', 'endTime'];
+        const filter: Record<string, any> = {};
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                filter[field] = req.body[field];
+            }
+        }
+
+        const appointments = await Appointment.find(filter)
             .populate('customerId')
             .populate({
                 path: 'vendorServiceId',

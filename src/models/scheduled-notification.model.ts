@@ -4,7 +4,7 @@ export interface IScheduledNotification {
     _id?: string;
     appointmentId: mongoose.Types.ObjectId;
     customerId: mongoose.Types.ObjectId;
-    type: 'reminder_1h' | 'reminder_24h';
+    type: 'reminder_immediate' | 'reminder_24h' | 'reminder_2h' | 'reminder_2h_after';
     scheduledFor: Date;
     status: 'pending' | 'sent' | 'cancelled' | 'failed';
     // Notification content
@@ -35,7 +35,7 @@ const ScheduledNotificationSchema: Schema = new Schema({
     },
     type: {
         type: String,
-        enum: ['reminder_1h', 'reminder_24h'],
+        enum: ['reminder_immediate', 'reminder_24h', 'reminder_2h', 'reminder_2h_after'],
         required: true
     },
     scheduledFor: {

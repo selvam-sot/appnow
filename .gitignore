@@ -27,4 +27,3 @@ Thumbs.db
 # Azure deployment artifacts
 .deployment
 .azure.env
-.env

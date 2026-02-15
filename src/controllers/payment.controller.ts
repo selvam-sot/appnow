@@ -7,6 +7,7 @@ import logger from '../config/logger';
 import Stripe from 'stripe';
 import SlotLock from '../models/slot-lock.model';
 import Appointment from '../models/appointment.model';
+import User from '../models/user.model';
 
 export const createPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
     const errors = validationResult(req);
@@ -20,21 +21,57 @@ export const createPaymentIntent = asyncHandler(async (req: Request, res: Respon
         // Get userId from metadata (passed from client) or from authenticated user
         const userId = metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
 
+        // Auto-create or find Stripe customer for the user
+        let stripeCustomerId = customerId;
+        const clerkId = metadata?.clerkUserId || (req as any).auth?.userId;
+        if (!stripeCustomerId && clerkId) {
+            const user = await User.findOne({ clerkId });
+            if (user) {
+                if (user.stripeCustomerId) {
+                    stripeCustomerId = user.stripeCustomerId;
+                } else {
+                    // Create a new Stripe customer and save to user
+                    const customer = await StripeService.createCustomer({
+                        email: user.email,
+                        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+                        phone: user.phone,
+                    });
+                    user.stripeCustomerId = customer.id;
+                    await user.save();
+                    stripeCustomerId = customer.id;
+                    logger.info(`Created and saved Stripe customer ${customer.id} for user ${clerkId}`);
+                }
+            }
+        }
+
         const paymentIntent = await StripeService.createPaymentIntent({
             amount,
             currency,
-            customerId,
+            customerId: stripeCustomerId,
             metadata: {
                 ...metadata,
                 userId,
             }
         });
 
+        // Create ephemeral key for Payment Sheet (enables saved cards + Apple/Google Pay)
+        let ephemeralKey: string | undefined;
+        if (stripeCustomerId) {
+            try {
+                const key = await StripeService.createEphemeralKey(stripeCustomerId);
+                ephemeralKey = key.secret;
+            } catch (err: any) {
+                logger.warn(`Failed to create ephemeral key: ${err.message}`);
+            }
+        }
+
         res.status(200).json({
             success: true,
             data: {
                 client_secret: paymentIntent.client_secret,
                 paymentIntentId: paymentIntent.id,
+                ephemeralKey,
+                customerId: stripeCustomerId,
             }
         });
     } catch (error: any) {
@@ -455,3 +492,52 @@ export const getPaymentHistory = asyncHandler(async (req: Request, res: Response
         });
     }
 });
+
+export const getSavedPaymentMethods = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { clerkId } = req.params;
+        if (!clerkId) {
+            res.status(400).json({ success: false, message: 'clerkId is required' });
+            return;
+        }
+
+        const user = await User.findOne({ clerkId });
+        if (!user) {
+            res.status(404).json({ success: false, message: 'User not found' });
+            return;
+        }
+
+        if (!user.stripeCustomerId) {
+            res.status(200).json({ success: true, data: [] });
+            return;
+        }
+
+        const methods = await StripeService.listPaymentMethods(user.stripeCustomerId);
+        const formatted = methods.map((m: any) => ({
+            id: m.id,
+            brand: m.card?.brand,
+            last4: m.card?.last4,
+            expMonth: m.card?.exp_month,
+            expYear: m.card?.exp_year,
+        }));
+
+        res.status(200).json({ success: true, data: formatted });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const deleteSavedPaymentMethod = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { paymentMethodId } = req.params;
+        if (!paymentMethodId) {
+            res.status(400).json({ success: false, message: 'paymentMethodId is required' });
+            return;
+        }
+
+        await StripeService.detachPaymentMethod(paymentMethodId);
+        res.status(200).json({ success: true, message: 'Payment method removed' });
+    } catch (error: any) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

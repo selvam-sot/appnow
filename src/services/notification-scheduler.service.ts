@@ -13,7 +13,7 @@
 import ScheduledNotification, { IScheduledNotification } from '../models/scheduled-notification.model';
 import Appointment from '../models/appointment.model';
 import User from '../models/user.model';
-import { sendNotificationToUser } from './pushNotification.service';
+import { sendNotificationToUser } from './push-notification.service';
 import logger from '../config/logger';
 import mongoose from 'mongoose';
 
@@ -76,54 +76,106 @@ export async function scheduleAppointmentReminders(appointment: AppointmentDetai
 
         const notificationsToCreate: Partial<IScheduledNotification>[] = [];
 
-        // Schedule 1-hour reminder (if appointment is more than 1 hour away)
-        const oneHourBefore = new Date(appointmentDateTime.getTime() - 60 * 60 * 1000);
-        if (oneHourBefore > now) {
+        // 1. Schedule immediate confirmation (now + 30 seconds)
+        const immediateTime = new Date(now.getTime() + 30 * 1000);
+        const existingImmediate = await ScheduledNotification.countDocuments({
+            appointmentId: new mongoose.Types.ObjectId(appointmentId),
+            type: 'reminder_immediate',
+            status: { $in: ['pending', 'sent'] }
+        });
+        if (existingImmediate === 0) {
             notificationsToCreate.push({
                 appointmentId: new mongoose.Types.ObjectId(appointmentId),
                 customerId: new mongoose.Types.ObjectId(customerId),
-                type: 'reminder_1h',
-                scheduledFor: oneHourBefore,
+                type: 'reminder_immediate',
+                scheduledFor: immediateTime,
                 status: 'pending',
-                title: 'Appointment in 1 Hour!',
-                body: vendorName
-                    ? `Your ${serviceName} appointment with ${vendorName} starts at ${appointment.startTime}. Get ready!`
-                    : `Your ${serviceName} appointment starts at ${appointment.startTime}. Get ready!`,
+                title: 'Booking Confirmed!',
+                body: `Your ${serviceName} appointment is booked for ${formattedDate} at ${appointment.startTime}`,
                 data: {
                     appointmentId,
-                    serviceName,
-                    vendorName,
-                    date: formattedDate,
-                    time: appointment.startTime,
-                    type: 'reminder_1h',
+                    type: 'reminder_immediate',
                 },
                 retryCount: 0,
             });
         }
 
-        // Schedule 24-hour reminder (if appointment is more than 24 hours away)
+        // 2. Schedule 24-hour reminder (if appointment is more than 24 hours away)
         const twentyFourHoursBefore = new Date(appointmentDateTime.getTime() - 24 * 60 * 60 * 1000);
         if (twentyFourHoursBefore > now) {
-            notificationsToCreate.push({
+            const existing24h = await ScheduledNotification.countDocuments({
                 appointmentId: new mongoose.Types.ObjectId(appointmentId),
-                customerId: new mongoose.Types.ObjectId(customerId),
                 type: 'reminder_24h',
-                scheduledFor: twentyFourHoursBefore,
-                status: 'pending',
-                title: 'Appointment Tomorrow',
-                body: vendorName
-                    ? `Reminder: Your ${serviceName} appointment with ${vendorName} is tomorrow (${formattedDate}) at ${appointment.startTime}.`
-                    : `Reminder: Your ${serviceName} appointment is tomorrow (${formattedDate}) at ${appointment.startTime}.`,
-                data: {
-                    appointmentId,
-                    serviceName,
-                    vendorName,
-                    date: formattedDate,
-                    time: appointment.startTime,
-                    type: 'reminder_24h',
-                },
-                retryCount: 0,
+                status: { $in: ['pending', 'sent'] }
             });
+            if (existing24h === 0) {
+                notificationsToCreate.push({
+                    appointmentId: new mongoose.Types.ObjectId(appointmentId),
+                    customerId: new mongoose.Types.ObjectId(customerId),
+                    type: 'reminder_24h',
+                    scheduledFor: twentyFourHoursBefore,
+                    status: 'pending',
+                    title: 'Appointment Tomorrow',
+                    body: `Reminder: ${serviceName} tomorrow at ${appointment.startTime}`,
+                    data: {
+                        appointmentId,
+                        type: 'reminder_24h',
+                    },
+                    retryCount: 0,
+                });
+            }
+        }
+
+        // 3. Schedule 2-hour reminder (if appointment is more than 2 hours away)
+        const twoHoursBefore = new Date(appointmentDateTime.getTime() - 2 * 60 * 60 * 1000);
+        if (twoHoursBefore > now) {
+            const existing2h = await ScheduledNotification.countDocuments({
+                appointmentId: new mongoose.Types.ObjectId(appointmentId),
+                type: 'reminder_2h',
+                status: { $in: ['pending', 'sent'] }
+            });
+            if (existing2h === 0) {
+                notificationsToCreate.push({
+                    appointmentId: new mongoose.Types.ObjectId(appointmentId),
+                    customerId: new mongoose.Types.ObjectId(customerId),
+                    type: 'reminder_2h',
+                    scheduledFor: twoHoursBefore,
+                    status: 'pending',
+                    title: 'Almost Time!',
+                    body: `Your ${serviceName} appointment is in 2 hours`,
+                    data: {
+                        appointmentId,
+                        type: 'reminder_2h',
+                    },
+                    retryCount: 0,
+                });
+            }
+        }
+
+        // 4. Schedule 2-hour after reminder (post-appointment follow-up)
+        const twoHoursAfter = new Date(appointmentDateTime.getTime() + 2 * 60 * 60 * 1000);
+        if (twoHoursAfter > now) {
+            const existingPost = await ScheduledNotification.countDocuments({
+                appointmentId: new mongoose.Types.ObjectId(appointmentId),
+                type: 'reminder_2h_after',
+                status: { $in: ['pending', 'sent'] }
+            });
+            if (existingPost === 0) {
+                notificationsToCreate.push({
+                    appointmentId: new mongoose.Types.ObjectId(appointmentId),
+                    customerId: new mongoose.Types.ObjectId(customerId),
+                    type: 'reminder_2h_after',
+                    scheduledFor: twoHoursAfter,
+                    status: 'pending',
+                    title: 'How Was Your Visit?',
+                    body: `How was your ${serviceName}? Rate your experience`,
+                    data: {
+                        appointmentId,
+                        type: 'reminder_2h_after',
+                    },
+                    retryCount: 0,
+                });
+            }
         }
 
         // Create scheduled notifications
@@ -131,7 +183,7 @@ export async function scheduleAppointmentReminders(appointment: AppointmentDetai
             await ScheduledNotification.insertMany(notificationsToCreate);
             logger.info(`[NotificationScheduler] Scheduled ${notificationsToCreate.length} reminders for appointment ${appointmentId}`);
         } else {
-            logger.info(`[NotificationScheduler] No reminders to schedule for appointment ${appointmentId} (too close to start time)`);
+            logger.info(`[NotificationScheduler] No reminders to schedule for appointment ${appointmentId} (all already scheduled or past)`);
         }
 
     } catch (error: any) {
