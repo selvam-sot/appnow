@@ -219,3 +219,90 @@ export const getNearbyAvailableDates = asyncHandler(async (req: Request, res: Re
         });
     }
 });
+
+/**
+ * Get vendor services with their individual slots for a given service + date.
+ * Unlike getServiceSlotsByDate which groups slots across vendors, this returns
+ * per-vendor-service data so the client can display vendor cards with embedded slots.
+ */
+export const getVendorServicesWithSlots = asyncHandler(async (req: Request, res: Response) => {
+    const dt = moment(req.body.date).format('YYYY-MM-DD');
+    const serviceId = req.body.serviceId;
+
+    try {
+        // Get all active vendor services for this service, populated with vendor info
+        const vendorServices = await VendorService.find({
+            serviceId: new mongoose.Types.ObjectId(serviceId),
+            isActive: true
+        })
+            .select('name image price duration rating totalReviews vendorId shortDescription shortDescriptionType servicePlace')
+            .populate('vendorId', 'vendorName rating reviewCount logo')
+            .lean();
+
+        if (vendorServices.length === 0) {
+            res.status(200).json({ success: true, data: [] });
+            return;
+        }
+
+        const results: any[] = [];
+
+        for (const vs of vendorServices) {
+            const slotDocs = await VendorServiceSlot.aggregate([
+                { $match: { vendorServiceId: (vs as any)._id } },
+                { $unwind: '$dates' },
+                { $match: { 'dates.date': new Date(dt) } },
+                { $addFields: { duration: (vs as any).duration } }
+            ]);
+
+            let vendorSlots: any[] = [];
+            const appointments: any = [];
+
+            if (slotDocs.length > 0) {
+                slotDocs.forEach((slotDoc: any) => {
+                    const computed = getServiceSlots(
+                        slotDoc.dates,
+                        slotDoc.duration,
+                        appointments,
+                        (slotDoc.vendorServiceId || '').toString()
+                    );
+                    vendorSlots = vendorSlots.concat(computed);
+                });
+            }
+
+            // Only include vendor services that have available slots
+            if (vendorSlots.length > 0) {
+                results.push({
+                    vendorService: {
+                        _id: (vs as any)._id,
+                        name: (vs as any).name,
+                        image: (vs as any).image,
+                        price: (vs as any).price,
+                        duration: (vs as any).duration,
+                        rating: (vs as any).rating || 0,
+                        totalReviews: (vs as any).totalReviews || 0,
+                        shortDescription: (vs as any).shortDescription,
+                        shortDescriptionType: (vs as any).shortDescriptionType,
+                        servicePlace: (vs as any).servicePlace,
+                        vendorId: (vs as any).vendorId,
+                    },
+                    slots: vendorSlots.map((s: any) => ({
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        availableSlots: s.availableSlots,
+                    })),
+                });
+            }
+        }
+
+        // Sort by vendor rating descending
+        results.sort((a, b) => (b.vendorService.rating || 0) - (a.vendorService.rating || 0));
+
+        res.status(200).json({ success: true, data: results });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+    }
+});

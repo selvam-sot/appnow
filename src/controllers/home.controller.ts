@@ -150,6 +150,96 @@ export const getMostSearchedServices = asyncHandler(async (_req: Request, res: R
 });
 
 /**
+ * Get popular vendor services based on search frequency + rating.
+ * Aggregates SearchLog by serviceId, then picks the highest-rated vendor
+ * service for each popular service category. Returns top 6.
+ * Falls back to newest active vendor services if no search logs exist.
+ */
+export const getPopularServices = asyncHandler(async (_req: Request, res: Response) => {
+    try {
+        const popularServiceIds = await SearchLog.aggregate([
+            { $group: { _id: '$serviceId', searchCount: { $sum: 1 } } },
+            { $sort: { searchCount: -1 } },
+            { $limit: 20 }
+        ]);
+
+        if (popularServiceIds.length === 0) {
+            // Fallback: newest active vendor services
+            const fallback = await VendorService.find({ isActive: true })
+                .sort({ createdAt: -1 })
+                .limit(6)
+                .select('name image price duration rating totalReviews vendorId')
+                .populate('vendorId', 'vendorName')
+                .lean();
+
+            const result = fallback.map((vs: any) => ({
+                _id: vs._id,
+                name: vs.name,
+                image: vs.image,
+                price: vs.price,
+                duration: vs.duration,
+                rating: vs.rating || 0,
+                totalReviews: vs.totalReviews || 0,
+                vendorName: vs.vendorId?.vendorName || '',
+            }));
+
+            res.status(200).json({ success: true, data: result });
+            return;
+        }
+
+        const serviceIds = popularServiceIds.map(item => item._id);
+
+        // Find vendor services for these popular service categories
+        const vendorServices = await VendorService.find({
+            serviceId: { $in: serviceIds },
+            isActive: true
+        })
+            .select('name image price duration rating totalReviews vendorId serviceId')
+            .populate('vendorId', 'vendorName')
+            .lean();
+
+        // Pick the highest-rated vendor service per serviceId
+        const serviceMap = new Map<string, any>();
+        for (const vs of vendorServices) {
+            const sId = (vs as any).serviceId.toString();
+            const existing = serviceMap.get(sId);
+            if (!existing || ((vs as any).rating || 0) > (existing.rating || 0)) {
+                serviceMap.set(sId, vs);
+            }
+        }
+
+        // Maintain search popularity order
+        const searchCountMap = new Map(
+            popularServiceIds.map(item => [item._id.toString(), item.searchCount])
+        );
+
+        const result = Array.from(serviceMap.entries())
+            .map(([serviceId, vs]: [string, any]) => ({
+                _id: vs._id,
+                name: vs.name,
+                image: vs.image,
+                price: vs.price,
+                duration: vs.duration,
+                rating: vs.rating || 0,
+                totalReviews: vs.totalReviews || 0,
+                vendorName: vs.vendorId?.vendorName || '',
+                _searchCount: searchCountMap.get(serviceId) || 0,
+            }))
+            .sort((a, b) => b._searchCount - a._searchCount)
+            .slice(0, 6)
+            .map(({ _searchCount, ...rest }) => rest);
+
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: 'Server Error',
+            message: error instanceof Error ? error.message : 'Unknown error occurred',
+        });
+    }
+});
+
+/**
  * Log a service search selection.
  * Called when a user selects a service from search results.
  */

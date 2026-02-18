@@ -20,6 +20,11 @@ import cacheRoutes from './cache.routes';
 import auditLogRoutes from './audit-log.routes';
 import reportsRoutes from './reports.routes';
 import promotionRoutes from './promotion.routes';
+import loyaltyRoutes from './loyalty.routes';
+import referralRoutes from './referral.routes';
+import waitlistRoutes from './waitlist.routes';
+import searchLogRoutes from './search-log.routes';
+import scheduledNotificationRoutes from './scheduled-notification.routes';
 import { syncAdmin, getAdminProfile } from '../../controllers/admin-portal.controller';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 
@@ -53,5 +58,10 @@ router.use('/users', userRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/slot-locks', slotLockRoutes);
 router.use('/promotions', promotionRoutes);
+router.use('/loyalty', loyaltyRoutes);
+router.use('/referrals', referralRoutes);
+router.use('/waitlist', waitlistRoutes);
+router.use('/search-logs', searchLogRoutes);
+router.use('/scheduled-notifications', scheduledNotificationRoutes);
 
 export default router;
