@@ -49,7 +49,7 @@ export const getMostBookedServices = asyncHandler(async (_req: Request, res: Res
             isActive: true
         })
             .select('name image price duration rating totalReviews vendorId')
-            .populate('vendorId', 'vendorName')
+            .populate('vendorId', 'vendorName rating')
             .lean();
 
         // Merge booking count and maintain sort order
@@ -64,7 +64,7 @@ export const getMostBookedServices = asyncHandler(async (_req: Request, res: Res
                 image: vs.image,
                 price: vs.price,
                 duration: vs.duration,
-                rating: vs.rating || 0,
+                rating: vs.vendorId?.rating || vs.rating || 0,
                 totalReviews: vs.totalReviews || 0,
                 vendorName: vs.vendorId?.vendorName || '',
                 bookingCount: bookingCountMap.get(vs._id.toString()) || 0,
@@ -169,7 +169,7 @@ export const getPopularServices = asyncHandler(async (_req: Request, res: Respon
                 .sort({ createdAt: -1 })
                 .limit(6)
                 .select('name image price duration rating totalReviews vendorId')
-                .populate('vendorId', 'vendorName')
+                .populate('vendorId', 'vendorName rating')
                 .lean();
 
             const result = fallback.map((vs: any) => ({
@@ -178,7 +178,7 @@ export const getPopularServices = asyncHandler(async (_req: Request, res: Respon
                 image: vs.image,
                 price: vs.price,
                 duration: vs.duration,
-                rating: vs.rating || 0,
+                rating: vs.vendorId?.rating || vs.rating || 0,
                 totalReviews: vs.totalReviews || 0,
                 vendorName: vs.vendorId?.vendorName || '',
             }));
@@ -195,7 +195,7 @@ export const getPopularServices = asyncHandler(async (_req: Request, res: Respon
             isActive: true
         })
             .select('name image price duration rating totalReviews vendorId serviceId')
-            .populate('vendorId', 'vendorName')
+            .populate('vendorId', 'vendorName rating')
             .lean();
 
         // Pick the highest-rated vendor service per serviceId
@@ -220,7 +220,7 @@ export const getPopularServices = asyncHandler(async (_req: Request, res: Respon
                 image: vs.image,
                 price: vs.price,
                 duration: vs.duration,
-                rating: vs.rating || 0,
+                rating: vs.vendorId?.rating || vs.rating || 0,
                 totalReviews: vs.totalReviews || 0,
                 vendorName: vs.vendorId?.vendorName || '',
                 _searchCount: searchCountMap.get(serviceId) || 0,
