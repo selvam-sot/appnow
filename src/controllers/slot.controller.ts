@@ -195,9 +195,15 @@ export const getNearbyAvailableDates = asyncHandler(async (req: Request, res: Re
         // Step 6: Sort, pick 1 before + fill after to reach totalNeeded
         const sortedDates = Array.from(datesWithSlots).sort();
 
-        // At most 1 date before (the closest one before selected date)
-        const beforeDates = sortedDates.filter(d => moment(d).isBefore(targetDate));
-        const beforeDate = beforeDates.length > 0 ? [beforeDates[beforeDates.length - 1]] : [];
+        // Skip "before date" when targetDate is today or within 1 day of today
+        // (handles server/client timezone mismatch — avoids suggesting past dates)
+        const skipBeforeDates = targetDate.diff(today, 'days') <= 1;
+
+        let beforeDate: string[] = [];
+        if (!skipBeforeDates) {
+            const beforeDates = sortedDates.filter(d => moment(d).isBefore(targetDate));
+            beforeDate = beforeDates.length > 0 ? [beforeDates[beforeDates.length - 1]] : [];
+        }
 
         // After dates: fill remaining to reach totalNeeded
         const afterNeeded = totalNeeded - beforeDate.length;
