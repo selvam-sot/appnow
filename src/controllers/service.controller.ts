@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import Service from './../models/service.model';
+import Category from './../models/category.model';
+import SubCategory from './../models/sub-category.model';
+import VendorService from './../models/vendor-service.model';
 import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
 
@@ -52,26 +55,54 @@ export const getServiceList = asyncHandler(async (req: Request, res: Response) =
     try {
         // Whitelist allowed query fields to prevent NoSQL injection
         const allowedFields = ['isActive', 'categoryId', 'subCategoryId'];
-        const filter: Record<string, any> = {};
+        const baseFilter: Record<string, any> = {};
         for (const field of allowedFields) {
             if (req.body[field] !== undefined) {
-                filter[field] = req.body[field];
+                baseFilter[field] = req.body[field];
             }
         }
 
-        // Safely handle name search with escaped RegExp to prevent ReDoS
-        if (req.body.name && typeof req.body.name === 'string') {
-            const escaped = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            filter.name = new RegExp(escaped, 'i');
+        const limit = (req.body.limit && Number.isInteger(Number(req.body.limit)))
+            ? Math.min(Number(req.body.limit), 100)
+            : 100;
+
+        // If no search term, just return services with base filters
+        if (!req.body.name || typeof req.body.name !== 'string') {
+            const services = await Service.find(baseFilter).sort({ name: 1 }).limit(limit);
+            res.status(200).json({ success: true, count: services.length, data: services });
+            return;
         }
 
-        // Apply limit if provided
-        let query = Service.find(filter).sort({ name: 1 });
-        if (req.body.limit && Number.isInteger(Number(req.body.limit))) {
-            query = query.limit(Math.min(Number(req.body.limit), 100));
+        const escaped = req.body.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nameRegex = new RegExp(escaped, 'i');
+
+        // Search across Service name, Category name, SubCategory name, and VendorService name in parallel
+        const [matchingCategories, matchingSubCategories, matchingVendorServices] = await Promise.all([
+            Category.find({ name: nameRegex }).select('_id').lean(),
+            SubCategory.find({ name: nameRegex }).select('_id').lean(),
+            VendorService.find({ name: nameRegex }).select('serviceId').lean(),
+        ]);
+
+        const categoryIds = matchingCategories.map(c => c._id);
+        const subCategoryIds = matchingSubCategories.map(sc => sc._id);
+        const serviceIdsFromVS = [...new Set(matchingVendorServices.map(vs => (vs as any).serviceId.toString()))];
+
+        // Build OR conditions: match service name, or parent category/subcategory, or linked vendor service
+        const orConditions: any[] = [
+            { name: nameRegex },
+        ];
+        if (categoryIds.length > 0) {
+            orConditions.push({ categoryId: { $in: categoryIds } });
+        }
+        if (subCategoryIds.length > 0) {
+            orConditions.push({ subCategoryId: { $in: subCategoryIds } });
+        }
+        if (serviceIdsFromVS.length > 0) {
+            orConditions.push({ _id: { $in: serviceIdsFromVS } });
         }
 
-        const services = await query;
+        const filter = { ...baseFilter, $or: orConditions };
+        const services = await Service.find(filter).sort({ name: 1 }).limit(limit);
 
         res.status(200).json({
             success: true,
