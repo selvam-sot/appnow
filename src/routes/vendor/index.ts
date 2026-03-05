@@ -31,7 +31,8 @@ import {
     approveReview,
     rejectReview,
     getCategories,
-    getSubCategories
+    getSubCategories,
+    getAnalytics
 } from '../../controllers/vendor-portal.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
 
@@ -92,6 +93,9 @@ router.post('/services/:serviceId/slots', [
 ], createServiceSlot);
 router.put('/services/:serviceId/slots/:slotId', updateServiceSlot);
 router.delete('/services/:serviceId/slots/:slotId', deleteServiceSlot);
+
+// Analytics
+router.get('/analytics', getAnalytics);
 
 // Earnings
 router.get('/earnings', getEarnings);

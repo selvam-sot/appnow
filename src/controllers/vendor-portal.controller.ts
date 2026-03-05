@@ -1458,3 +1458,200 @@ export const deleteServiceSlot = asyncHandler(async (req: Request, res: Response
         message: 'Slot deleted successfully'
     });
 });
+
+/**
+ * Get vendor analytics data
+ * Revenue trends, booking stats, top services, etc.
+ */
+export const getAnalytics = asyncHandler(async (req: Request, res: Response) => {
+    const vendorId = req.vendorId;
+    const { period = '3months' } = req.query;
+
+    const now = new Date();
+    let startDate: Date;
+
+    switch (period) {
+        case 'month':
+            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        case 'year':
+            startDate = new Date(now.getFullYear(), 0, 1);
+            break;
+        case '3months':
+        default:
+            startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            break;
+    }
+
+    // Get vendor services
+    const vendorServices = await VendorService.find({ vendorId }).select('_id name').lean();
+    const serviceIds = vendorServices.map(s => s._id);
+
+    const previousPeriodDuration = now.getTime() - startDate.getTime();
+    const prevStart = new Date(startDate.getTime() - previousPeriodDuration);
+
+    const [
+        currentAppointments,
+        previousAppointments,
+        revenueByMonth,
+        bookingsByStatus,
+        bookingsByDay,
+        topServicesAgg,
+        ratingAgg
+    ] = await Promise.all([
+        // Current period appointments
+        Appointment.find({
+            vendorServiceId: { $in: serviceIds },
+            createdAt: { $gte: startDate }
+        }).lean(),
+        // Previous period appointments (for comparison)
+        Appointment.find({
+            vendorServiceId: { $in: serviceIds },
+            createdAt: { $gte: prevStart, $lt: startDate }
+        }).lean(),
+        // Revenue by month
+        Appointment.aggregate([
+            {
+                $match: {
+                    vendorServiceId: { $in: serviceIds },
+                    createdAt: { $gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) },
+                    status: { $in: ['confirmed', 'completed'] }
+                }
+            },
+            {
+                $group: {
+                    _id: { $dateToString: { format: '%Y-%m', date: '$createdAt' } },
+                    amount: { $sum: { $ifNull: ['$total', '$serviceFee'] } }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]),
+        // Bookings by status
+        Appointment.aggregate([
+            {
+                $match: {
+                    vendorServiceId: { $in: serviceIds },
+                    createdAt: { $gte: startDate }
+                }
+            },
+            {
+                $group: {
+                    _id: '$status',
+                    count: { $sum: 1 }
+                }
+            }
+        ]),
+        // Bookings by day of week
+        Appointment.aggregate([
+            {
+                $match: {
+                    vendorServiceId: { $in: serviceIds },
+                    createdAt: { $gte: startDate }
+                }
+            },
+            {
+                $group: {
+                    _id: { $dayOfWeek: '$appointmentDate' },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]),
+        // Top services
+        Appointment.aggregate([
+            {
+                $match: {
+                    vendorServiceId: { $in: serviceIds },
+                    createdAt: { $gte: startDate }
+                }
+            },
+            {
+                $group: {
+                    _id: '$vendorServiceId',
+                    bookings: { $sum: 1 },
+                    revenue: { $sum: { $ifNull: ['$total', '$serviceFee'] } }
+                }
+            },
+            { $sort: { bookings: -1 } },
+            { $limit: 5 }
+        ]),
+        // Average rating
+        Review.aggregate([
+            { $match: { vendorId } },
+            { $group: { _id: null, avgRating: { $avg: '$rating' }, count: { $sum: 1 } } }
+        ])
+    ]);
+
+    // Calculate overview stats
+    const currentRevenue = currentAppointments
+        .filter(a => ['confirmed', 'completed'].includes(a.status))
+        .reduce((sum: number, a: any) => sum + (a.total || a.serviceFee || 0), 0);
+    const previousRevenue = previousAppointments
+        .filter(a => ['confirmed', 'completed'].includes(a.status))
+        .reduce((sum: number, a: any) => sum + (a.total || a.serviceFee || 0), 0);
+
+    const currentBookings = currentAppointments.length;
+    const previousBookings = previousAppointments.length;
+
+    const completedCurrent = currentAppointments.filter(a => a.status === 'completed').length;
+    const completionRate = currentBookings > 0 ? Math.round((completedCurrent / currentBookings) * 100) : 0;
+
+    const revenueChange = previousRevenue > 0
+        ? Math.round(((currentRevenue - previousRevenue) / previousRevenue) * 100)
+        : 0;
+    const bookingsChange = previousBookings > 0
+        ? Math.round(((currentBookings - previousBookings) / previousBookings) * 100)
+        : 0;
+
+    // Format revenue by month with month names
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const formattedRevenueByMonth = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const found = revenueByMonth.find((r: any) => r._id === key);
+        formattedRevenueByMonth.push({
+            month: monthNames[d.getMonth()],
+            amount: found?.amount || 0
+        });
+    }
+
+    // Format bookings by day
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const formattedBookingsByDay = dayNames.map((day, idx) => {
+        const found = bookingsByDay.find((b: any) => b._id === idx + 1);
+        return { day, count: found?.count || 0 };
+    });
+
+    // Format top services with names
+    const serviceNameMap = new Map(vendorServices.map(s => [s._id.toString(), s.name]));
+    const formattedTopServices = topServicesAgg.map((s: any) => ({
+        name: serviceNameMap.get(s._id.toString()) || 'Unknown Service',
+        bookings: s.bookings,
+        revenue: s.revenue
+    }));
+
+    // Format bookings by status
+    const formattedBookingsByStatus = bookingsByStatus.map((b: any) => ({
+        status: b._id,
+        count: b.count
+    }));
+
+    res.status(200).json({
+        success: true,
+        data: {
+            overview: {
+                totalRevenue: currentRevenue,
+                totalBookings: currentBookings,
+                completionRate,
+                avgRating: ratingAgg[0]?.avgRating || 0,
+                revenueChange,
+                bookingsChange
+            },
+            revenueByMonth: formattedRevenueByMonth,
+            bookingsByStatus: formattedBookingsByStatus,
+            topServices: formattedTopServices,
+            bookingsByDay: formattedBookingsByDay
+        }
+    });
+});
