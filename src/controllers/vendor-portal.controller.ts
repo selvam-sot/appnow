@@ -196,8 +196,9 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
     res.status(200).json({
         success: true,
         data: {
-            todayBookings: todayAppointments,
-            pendingBookings: pendingAppointments,
+            todayAppointments,
+            pendingAppointments,
+            totalServices: vendorServices.length,
             monthlyBookings: monthlyAppointments,
             monthlyRevenue: monthlyRevenue[0]?.total || 0,
             totalCustomers,
