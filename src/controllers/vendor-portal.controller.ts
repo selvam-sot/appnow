@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { createClerkClient } from '@clerk/backend';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import { AppError } from '../utils/appError.util';
 import Vendor from '../models/vendor.model';
@@ -10,6 +11,8 @@ import Review from '../models/review.model';
 import Category from '../models/category.model';
 import SubCategory from '../models/sub-category.model';
 import Service from '../models/service.model';
+
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY! });
 
 /**
  * Sync vendor user from Clerk
@@ -92,6 +95,15 @@ export const syncVendor = asyncHandler(async (req: Request, res: Response) => {
         if (needsSave) {
             await vendor.save();
         }
+    }
+
+    // Set Clerk publicMetadata so role is available on the client
+    try {
+        await clerkClient.users.updateUserMetadata(clerkId, {
+            publicMetadata: { role: 'vendor' },
+        });
+    } catch (err) {
+        console.error('Failed to update Clerk publicMetadata:', err);
     }
 
     res.status(200).json({
