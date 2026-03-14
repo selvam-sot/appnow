@@ -77,7 +77,7 @@ export const syncVendor = asyncHandler(async (req: Request, res: Response) => {
             city: '',
             zip: '',
             address1: '',
-            verificationStatus: 'pending',
+            verificationStatus: 'verified',
             isActive: true,
             userId: user._id
         });
