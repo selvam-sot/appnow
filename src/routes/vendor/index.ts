@@ -5,6 +5,7 @@ import {
     getDashboardStats,
     getTodayAppointments,
     getAppointments,
+    getAppointmentById,
     confirmAppointment,
     declineAppointment,
     completeAppointment,
@@ -53,6 +54,7 @@ router.get('/appointments/today', getTodayAppointments);
 
 // Appointments
 router.get('/appointments', getAppointments);
+router.get('/appointments/:id', getAppointmentById);
 router.post('/appointments/:id/confirm', confirmAppointment);
 router.post('/appointments/:id/decline', [
     body('reason').optional().isString()

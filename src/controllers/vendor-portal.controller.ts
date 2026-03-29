@@ -323,6 +323,54 @@ export const getAppointments = asyncHandler(async (req: Request, res: Response) 
 });
 
 /**
+ * Get single appointment by ID
+ */
+export const getAppointmentById = asyncHandler(async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const vendorId = req.vendorId;
+
+    const vendorServices = await VendorService.find({ vendorId }).select('_id');
+    const serviceIds = vendorServices.map(s => s._id.toString());
+
+    const appointment = await Appointment.findById(id)
+        .populate('customerId', 'firstName lastName email phone')
+        .populate({
+            path: 'vendorServiceId',
+            populate: { path: 'serviceId', select: 'name' }
+        })
+        .lean();
+
+    if (!appointment || !serviceIds.includes((appointment.vendorServiceId as any)?._id?.toString())) {
+        throw new AppError('Appointment not found', 404);
+    }
+
+    res.status(200).json({
+        success: true,
+        data: {
+            _id: appointment._id,
+            customer: {
+                firstName: (appointment.customerId as any)?.firstName || '',
+                lastName: (appointment.customerId as any)?.lastName || '',
+                email: (appointment.customerId as any)?.email,
+                phone: (appointment.customerId as any)?.phone,
+            },
+            vendorServiceId: {
+                name: (appointment.vendorServiceId as any)?.serviceId?.name || 'Service',
+                price: (appointment.vendorServiceId as any)?.price || appointment.total,
+                duration: (appointment.vendorServiceId as any)?.duration || 0,
+            },
+            appointmentDate: appointment.appointmentDate,
+            startTime: appointment.startTime,
+            endTime: appointment.endTime,
+            status: appointment.status,
+            total: appointment.total || appointment.serviceFee,
+            notes: appointment.customerNotes,
+            declineReason: appointment.statusReason || appointment.cancellationReason,
+        }
+    });
+});
+
+/**
  * Confirm appointment
  */
 export const confirmAppointment = asyncHandler(async (req: Request, res: Response) => {

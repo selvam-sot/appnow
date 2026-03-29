@@ -15,7 +15,7 @@ export const getAppointments = asyncHandler(async (req: Request, res: Response) 
             filter[field] = req.body[field];
         }
     }
-    const appointments = await Appointment.find(filter).populate('customerId').populate('vendorServiceId');
+    const appointments = await Appointment.find(filter).populate('customerId').populate('vendorServiceId').sort({ appointmentDate: -1 });
     res.json(appointments);
 });
 
