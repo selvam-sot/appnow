@@ -1,23 +1,23 @@
 import express from 'express';
 import { body } from 'express-validator';
 import {
-    signupUser,
-    loginUser,
-    activateUser,
-    logoutUser,
-    getUserProfile,
-    updateUserProfile,
-    deleteUserAccount,
-    getUsers,
-    searchUsers,
-    getUserById,
-    updateUserById,
-    deactivateUser,
-    reactivateUser,
-    deleteUserById,
-    bulkDeactivateUsers,
-    bulkActivateUsers,
-    resetUserPassword
+  signupUser,
+  loginUser,
+  activateUser,
+  logoutUser,
+  getUserProfile,
+  updateUserProfile,
+  deleteUserAccount,
+  getUsers,
+  searchUsers,
+  getUserById,
+  updateUserById,
+  deactivateUser,
+  reactivateUser,
+  deleteUserById,
+  bulkDeactivateUsers,
+  bulkActivateUsers,
+  resetUserPassword,
 } from '../../controllers/user.controller';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import { userValidationRules } from '../../utils/validation.util';
@@ -103,9 +103,12 @@ router.get('/search', protectAdmin, searchUsers);
  *       200:
  *         description: Users deactivated
  */
-router.post('/bulk/deactivate', protectAdmin, [
-    body('userIds').isArray().withMessage('userIds must be an array')
-], bulkDeactivateUsers);
+router.post(
+  '/bulk/deactivate',
+  protectAdmin,
+  [body('userIds').isArray().withMessage('userIds must be an array')],
+  bulkDeactivateUsers,
+);
 
 /**
  * @swagger
@@ -116,9 +119,12 @@ router.post('/bulk/deactivate', protectAdmin, [
  *     security:
  *       - bearerAuth: []
  */
-router.post('/bulk/activate', protectAdmin, [
-    body('userIds').isArray().withMessage('userIds must be an array')
-], bulkActivateUsers);
+router.post(
+  '/bulk/activate',
+  protectAdmin,
+  [body('userIds').isArray().withMessage('userIds must be an array')],
+  bulkActivateUsers,
+);
 
 /**
  * @swagger
@@ -173,9 +179,12 @@ router.post('/:id/reactivate', protectAdmin, reactivateUser);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/:id/reset-password', protectAdmin, [
-    body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
-], resetUserPassword);
+router.post(
+  '/:id/reset-password',
+  protectAdmin,
+  [body('newPassword').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')],
+  resetUserPassword,
+);
 
 /**
  * @swagger

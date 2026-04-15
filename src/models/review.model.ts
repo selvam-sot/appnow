@@ -1,89 +1,95 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 export interface IReview extends Document {
-    customerId: mongoose.Types.ObjectId;
-    vendorServiceId: mongoose.Types.ObjectId;
-    appointmentId: mongoose.Types.ObjectId;
-    vendorId: mongoose.Types.ObjectId;
-    rating: number;
-    title?: string;
-    comment?: string;
-    images?: string[];
-    status: 'pending' | 'approved' | 'rejected';
-    isVerified: boolean;
-    helpfulCount: number;
-    reportCount: number;
-    vendorResponse?: {
-        comment: string;
-        respondedAt: Date;
-    };
-    createdAt: Date;
-    updatedAt: Date;
+  customerId: mongoose.Types.ObjectId;
+  vendorServiceId: mongoose.Types.ObjectId;
+  appointmentId: mongoose.Types.ObjectId;
+  vendorId: mongoose.Types.ObjectId;
+  rating: number;
+  title?: string;
+  comment?: string;
+  images?: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  isVerified: boolean;
+  helpfulCount: number;
+  reportCount: number;
+  vendorResponse?: {
+    comment: string;
+    respondedAt: Date;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const ReviewSchema: Schema = new Schema({
+const ReviewSchema: Schema = new Schema(
+  {
     customerId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
     },
     vendorServiceId: {
-        type: Schema.Types.ObjectId,
-        ref: 'VendorService',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'VendorService',
+      required: true,
     },
     appointmentId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Appointment',
-        required: true,
-        unique: true // One review per appointment
+      type: Schema.Types.ObjectId,
+      ref: 'Appointment',
+      required: true,
+      unique: true, // One review per appointment
     },
     vendorId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Vendor',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'Vendor',
+      required: true,
     },
     rating: {
-        type: Number,
-        required: true,
-        min: 1,
-        max: 5
+      type: Number,
+      required: true,
+      min: 1,
+      max: 5,
     },
     title: {
-        type: String,
-        maxlength: 100
+      type: String,
+      maxlength: 100,
     },
     comment: {
-        type: String,
-        maxlength: 1000
+      type: String,
+      maxlength: 1000,
     },
-    images: [{
-        type: String
-    }],
-    status: {
+    images: [
+      {
         type: String,
-        enum: ['pending', 'approved', 'rejected'],
-        default: 'approved' // Auto-approve by default, change to 'pending' if moderation needed
+      },
+    ],
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'approved', // Auto-approve by default, change to 'pending' if moderation needed
     },
     isVerified: {
-        type: Boolean,
-        default: true // Verified purchase since we check appointment
+      type: Boolean,
+      default: true, // Verified purchase since we check appointment
     },
     helpfulCount: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     reportCount: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     vendorResponse: {
-        comment: String,
-        respondedAt: Date
-    }
-}, {
-    timestamps: true
-});
+      comment: String,
+      respondedAt: Date,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
 
 // Indexes for performance optimization
 ReviewSchema.index({ vendorServiceId: 1, status: 1 });

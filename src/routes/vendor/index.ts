@@ -1,49 +1,83 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
+import type { Request, Response, NextFunction } from 'express';
+import { verifyToken } from '@clerk/backend';
 import {
-    syncVendor,
-    getDashboardStats,
-    getTodayAppointments,
-    getAppointments,
-    getAppointmentById,
-    confirmAppointment,
-    declineAppointment,
-    completeAppointment,
-    markAppointmentMissed,
-    markAppointmentFailed,
-    getVendorServices,
-    getVendorServiceById,
-    createVendorService,
-    updateVendorService,
-    deleteVendorService,
-    toggleServiceStatus,
-    getServiceSlots,
-    createServiceSlot,
-    updateServiceSlot,
-    deleteServiceSlot,
-    getEarnings,
-    getTransactions,
-    getProfile,
-    updateProfile,
-    getReviews,
-    replyToReview,
-    getReviewsForManagement,
-    getRecentReviews,
-    approveReview,
-    rejectReview,
-    getCategories,
-    getSubCategories,
-    getAnalytics
+  syncVendor,
+  getDashboardStats,
+  getTodayAppointments,
+  getAppointments,
+  getAppointmentById,
+  confirmAppointment,
+  declineAppointment,
+  completeAppointment,
+  markAppointmentMissed,
+  markAppointmentFailed,
+  getVendorServices,
+  getVendorServiceById,
+  createVendorService,
+  updateVendorService,
+  deleteVendorService,
+  toggleServiceStatus,
+  getServiceSlots,
+  createServiceSlot,
+  updateServiceSlot,
+  deleteServiceSlot,
+  getEarnings,
+  getTransactions,
+  getProfile,
+  updateProfile,
+  getReviews,
+  replyToReview,
+  getReviewsForManagement,
+  getRecentReviews,
+  approveReview,
+  rejectReview,
+  getCategories,
+  getSubCategories,
+  getAnalytics,
 } from '../../controllers/vendor-portal.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
+import { AppError } from '../../utils/appError.util';
 
 const router = Router();
 
-// Public routes (no authentication required)
-router.post('/sync', [
+
+/**
+ * Middleware to verify the Clerk token on sync requests.
+ * Ensures the Bearer token's subject matches the clerkId in the request body.
+ */
+const verifySyncToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer')) {
+      return next(new AppError('Authorization token is required for sync.', 401));
+    }
+
+    const token = authHeader.split(' ')[1];
+    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY! });
+    const sub = payload.sub;
+
+    if (!sub || sub !== req.body.clerkId) {
+      return next(new AppError('Token does not match the provided Clerk ID.', 403));
+    }
+
+    next();
+  } catch {
+    return next(new AppError('Invalid or expired token.', 401));
+  }
+};
+
+// Sync route - requires valid Clerk token matching the clerkId in body
+router.post(
+  '/sync',
+  [
     body('clerkId').notEmpty().withMessage('Clerk ID is required'),
-    body('email').isEmail().withMessage('Valid email is required')
-], syncVendor);
+    body('email').isEmail().withMessage('Valid email is required'),
+  ],
+  verifySyncToken,
+  syncVendor,
+);
 
 // All routes below require vendor authentication
 router.use(protectVendor);
@@ -56,16 +90,34 @@ router.get('/appointments/today', getTodayAppointments);
 router.get('/appointments', getAppointments);
 router.get('/appointments/:id', getAppointmentById);
 router.post('/appointments/:id/confirm', confirmAppointment);
-router.post('/appointments/:id/decline', [
-    body('reason').optional().isString()
-], declineAppointment);
+router.post(
+  '/appointments/:id/decline',
+  [body('reason').optional().isString()],
+  declineAppointment,
+);
 router.post('/appointments/:id/complete', completeAppointment);
-router.post('/appointments/:id/missed', [
-    body('reason').notEmpty().withMessage('Reason is required').isLength({ min: 5 }).withMessage('Reason must be at least 5 characters')
-], markAppointmentMissed);
-router.post('/appointments/:id/failed', [
-    body('reason').notEmpty().withMessage('Reason is required').isLength({ min: 5 }).withMessage('Reason must be at least 5 characters')
-], markAppointmentFailed);
+router.post(
+  '/appointments/:id/missed',
+  [
+    body('reason')
+      .notEmpty()
+      .withMessage('Reason is required')
+      .isLength({ min: 5 })
+      .withMessage('Reason must be at least 5 characters'),
+  ],
+  markAppointmentMissed,
+);
+router.post(
+  '/appointments/:id/failed',
+  [
+    body('reason')
+      .notEmpty()
+      .withMessage('Reason is required')
+      .isLength({ min: 5 })
+      .withMessage('Reason must be at least 5 characters'),
+  ],
+  markAppointmentFailed,
+);
 
 // Categories (for service creation)
 router.get('/categories', getCategories);
@@ -74,25 +126,31 @@ router.get('/categories/:categoryId/subcategories', getSubCategories);
 // Services - CRUD
 router.get('/services', getVendorServices);
 router.get('/services/:id', getVendorServiceById);
-router.post('/services', [
+router.post(
+  '/services',
+  [
     body('name').notEmpty().withMessage('Service name is required'),
     body('categoryId').notEmpty().withMessage('Category is required'),
     body('price').isNumeric().withMessage('Price must be a number'),
-    body('duration').isNumeric().withMessage('Duration must be a number')
-], createVendorService);
+    body('duration').isNumeric().withMessage('Duration must be a number'),
+  ],
+  createVendorService,
+);
 router.put('/services/:id', updateVendorService);
 router.delete('/services/:id', deleteVendorService);
-router.patch('/services/:id/status', [
-    body('isActive').isBoolean()
-], toggleServiceStatus);
+router.patch('/services/:id/status', [body('isActive').isBoolean()], toggleServiceStatus);
 
 // Slots - CRUD for each service
 router.get('/services/:serviceId/slots', getServiceSlots);
-router.post('/services/:serviceId/slots', [
+router.post(
+  '/services/:serviceId/slots',
+  [
     body('date').notEmpty().withMessage('Date is required'),
     body('fromTime').notEmpty().withMessage('Start time is required'),
-    body('toTime').notEmpty().withMessage('End time is required')
-], createServiceSlot);
+    body('toTime').notEmpty().withMessage('End time is required'),
+  ],
+  createServiceSlot,
+);
 router.put('/services/:serviceId/slots/:slotId', updateServiceSlot);
 router.delete('/services/:serviceId/slots/:slotId', deleteServiceSlot);
 
@@ -111,9 +169,11 @@ router.put('/profile', updateProfile);
 router.get('/reviews', getReviews);
 router.get('/reviews/manage', getReviewsForManagement);
 router.get('/reviews/recent', getRecentReviews);
-router.post('/reviews/:id/reply', [
-    body('reply').notEmpty().withMessage('Reply is required')
-], replyToReview);
+router.post(
+  '/reviews/:id/reply',
+  [body('reply').notEmpty().withMessage('Reply is required')],
+  replyToReview,
+);
 router.post('/reviews/:id/approve', approveReview);
 router.post('/reviews/:id/reject', rejectReview);
 

@@ -1,62 +1,66 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IMonthlyService } from '../interfaces/monthly-service.interface';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { IMonthlyService } from '../interfaces/monthly-service.interface';
 
 const ServiceDateTiming: Schema = new Schema({
-    fromTime: {
-        type: String
-    },
-    toTime: {
-        type: String
-    },
-    reoccurrence: {
-        type: Number
-    }
+  fromTime: {
+    type: String,
+  },
+  toTime: {
+    type: String,
+  },
+  reoccurrence: {
+    type: Number,
+  },
 });
 
 const ServiceDate: Schema = new Schema({
-    date: {
-        type: String
-    },
-    reoccurrence: {
-        type: String
-    },
-    timingType: {
-        type: Number
-    },
-    timings: {
-        type: [ServiceDateTiming]
-    }
+  date: {
+    type: String,
+  },
+  reoccurrence: {
+    type: String,
+  },
+  timingType: {
+    type: Number,
+  },
+  timings: {
+    type: [ServiceDateTiming],
+  },
 });
 
-const MonthlyServiceSchema: Schema = new Schema({
+const MonthlyServiceSchema: Schema = new Schema(
+  {
     serviceId: {
-        type: Schema.Types.ObjectId,
-        ref: 'VendorService',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'VendorService',
+      required: true,
     },
     month: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     year: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     reoccurrence: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     dates: {
-        type: [ServiceDate],
-        required: true
+      type: [ServiceDate],
+      required: true,
     },
-}, { 
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 export default mongoose.model<IMonthlyService & Document>('MonthlyService', MonthlyServiceSchema);

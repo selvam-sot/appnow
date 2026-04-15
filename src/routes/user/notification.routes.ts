@@ -1,16 +1,19 @@
 import { Router } from 'express';
 import {
-    getUserNotifications,
-    getUnreadCount,
-    markAsRead,
-    markAllAsRead,
-    deleteNotification,
-    deleteAllNotifications,
-    registerPushToken,
-    removePushToken,
+  getUserNotifications,
+  getUnreadCount,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
+  registerPushToken,
+  removePushToken,
 } from '../../controllers/notification.controller';
+import { protect } from '../../middlewares/auth.middleware';
 
 const router = Router();
+
+router.use(protect);
 
 // Push token management
 // POST /api/v1/customer/notifications/push-token - Register push token

@@ -1,28 +1,29 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 export interface IReferral extends Document {
-    referrerId: string;
-    referredClerkId: string;
-    referralCode: string;
-    status: 'pending' | 'completed' | 'rewarded';
-    rewardGiven: boolean;
-    createdAt: Date;
-    updatedAt: Date;
+  referrerId: string;
+  referredClerkId: string;
+  referralCode: string;
+  status: 'pending' | 'completed' | 'rewarded';
+  rewardGiven: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const ReferralSchema = new Schema(
-    {
-        referrerId: { type: String, required: true },
-        referredClerkId: { type: String, required: true },
-        referralCode: { type: String, required: true, unique: true },
-        status: {
-            type: String,
-            enum: ['pending', 'completed', 'rewarded'],
-            default: 'pending',
-        },
-        rewardGiven: { type: Boolean, default: false },
+  {
+    referrerId: { type: String, required: true },
+    referredClerkId: { type: String, required: true },
+    referralCode: { type: String, required: true, unique: true },
+    status: {
+      type: String,
+      enum: ['pending', 'completed', 'rewarded'],
+      default: 'pending',
     },
-    { timestamps: true }
+    rewardGiven: { type: Boolean, default: false },
+  },
+  { timestamps: true },
 );
 
 ReferralSchema.index({ referrerId: 1 });

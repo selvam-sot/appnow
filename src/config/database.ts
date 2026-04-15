@@ -8,11 +8,9 @@ const logger = winston.createLogger({
     winston.format.timestamp(),
     winston.format.printf(({ timestamp, level, message }) => {
       return `${timestamp} ${level}: ${message}`;
-    })
+    }),
   ),
-  transports: [
-    new winston.transports.Console()
-  ],
+  transports: [new winston.transports.Console()],
 });
 
 // Connect to MongoDB (Azure Cosmos DB with MongoDB API)
@@ -27,8 +25,10 @@ export const connectToDatabase = async (): Promise<void> => {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       retryWrites: false, // Important for Cosmos DB
-      serverSelectionTimeoutMS: 30000, // Longer timeout for Azure
-      socketTimeoutMS: 75000, // Longer timeout for Azure
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
       keepAlive: true,
       keepAliveInitialDelay: 300000, // Helps with connection stability
     };
@@ -37,12 +37,14 @@ export const connectToDatabase = async (): Promise<void> => {
     logger.info(`Attempting to connect to Azure Cosmos DB: ${process.env.COSMOS_DB_NAME}`);
 
     mongoose.set('strictQuery', false);
-    
+
     await mongoose.connect(process.env.COSMOS_DB_CONNECTION_STRING, options);
-    
+
     logger.info('Successfully connected to Azure Cosmos DB');
   } catch (error) {
-    logger.error(`Error connecting to database: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    logger.error(
+      `Error connecting to database: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    );
     // Log detailed error for troubleshooting
     logger.error(`Full error: ${JSON.stringify(error)}`);
     process.exit(1);

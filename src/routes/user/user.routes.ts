@@ -1,18 +1,17 @@
-
 import express from 'express';
 import {
-    signupUser,
-    loginUser,
-    activateUser,
-    logoutUser,
-    getUserProfile,
-    updateUserProfile,
-    deleteUserAccount,
-    getUsers,
-    syncClerkUser,
-    getClerkUser,
-    updateClerkUser,
-    deleteClerkUser
+  signupUser,
+  loginUser,
+  activateUser,
+  logoutUser,
+  getUserProfile,
+  updateUserProfile,
+  deleteUserAccount,
+  getUsers,
+  syncClerkUser,
+  getClerkUser,
+  updateClerkUser,
+  deleteClerkUser,
 } from '../../controllers/user.controller';
 import { registerPushToken, removePushToken } from '../../controllers/notification.controller';
 import { protect, authorize } from '../../middlewares/auth.middleware';
@@ -31,22 +30,22 @@ const router = express.Router();
  *       200:
  *         description: API is healthy
  */
-router.get('/health',(req, res) => {
-    res.json({
-        message: 'User API running in health condition',
-        status: 'User routes are working',
-        version: '1.0.0',
-        timestamp: new Date().toISOString(),
-        endpoint: '/api/v1/user/health'
-    });
+router.get('/health', (req, res) => {
+  res.json({
+    message: 'User API running in health condition',
+    status: 'User routes are working',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoint: '/api/v1/user/health',
+  });
 });
 
 router.get('/test', (req, res) => {
-    res.json({
-        success: true,
-        message: 'User routes are working!',
-        timestamp: new Date().toISOString()
-    });
+  res.json({
+    success: true,
+    message: 'User routes are working!',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /**

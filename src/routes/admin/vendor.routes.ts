@@ -1,14 +1,14 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
-    createVendor,
-    getVendors,
-    getVendorById,
-    updateVendor,
-    deleteVendor,
-    getVendorsByVerificationStatus,
-    verifyVendor,
-    getVerificationStats
+  createVendor,
+  getVendors,
+  getVendorById,
+  updateVendor,
+  deleteVendor,
+  getVendorsByVerificationStatus,
+  verifyVendor,
+  getVerificationStats,
 } from '../../controllers/vendor.controller';
 
 const router = express.Router();

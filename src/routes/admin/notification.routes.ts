@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
-import { sendNotification, debugPushTokens, getVendorNotifications } from '../../controllers/notification.controller';
+import {
+  sendNotification,
+  debugPushTokens,
+  getVendorNotifications,
+} from '../../controllers/notification.controller';
 
 const router = Router();
 

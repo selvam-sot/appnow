@@ -1,9 +1,9 @@
 import express from 'express';
 import {
-    getMostBookedServices,
-    getMostSearchedServices,
-    getPopularServices,
-    logServiceSearch,
+  getMostBookedServices,
+  getMostSearchedServices,
+  getPopularServices,
+  logServiceSearch,
 } from '../../controllers/home.controller';
 
 const router = express.Router();

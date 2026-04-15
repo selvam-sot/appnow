@@ -1,41 +1,41 @@
 interface SocialMediaLink {
-    mediaName: string;
-    mediaLink: string;
+  mediaName: string;
+  mediaLink: string;
 }
 
 interface Description {
-    title: string;
-    type: string;
-    content: [string];
+  title: string;
+  type: string;
+  content: [string];
 }
 
 export interface IVendorService {
-    _id: string;
-    name: string;
-    categoryId: string;
-    subCategoryId: string;
-    serviceId: string;
-    vendorId: string;
-    subTitle: string;
-    shortDescriptionType: string;
-    shortDescription: [string];
-    description: [Description];
-    images: [string];
-    image: string;
-    thumbnail: string;
-    price: number;
-    duration: number;
-    servicePlace: string;
-    serviceType: string;
-    serviceTypeLink: string;
-    isCombo: boolean;
-    comboServiceIds: string;
-    isActive: boolean;
-    isFavorite: boolean;
-    tags: [string];
-    socialMediaLinks: [SocialMediaLink];
-    rating?: number;
-    totalReviews?: number;
-    ratingSum?: number;
-    __v?: number;
+  _id: string;
+  name: string;
+  categoryId: string;
+  subCategoryId: string;
+  serviceId: string;
+  vendorId: string;
+  subTitle: string;
+  shortDescriptionType: string;
+  shortDescription: [string];
+  description: [Description];
+  images: [string];
+  image: string;
+  thumbnail: string;
+  price: number;
+  duration: number;
+  servicePlace: string;
+  serviceType: string;
+  serviceTypeLink: string;
+  isCombo: boolean;
+  comboServiceIds: string;
+  isActive: boolean;
+  isFavorite: boolean;
+  tags: [string];
+  socialMediaLinks: [SocialMediaLink];
+  rating?: number;
+  totalReviews?: number;
+  ratingSum?: number;
+  __v?: number;
 }

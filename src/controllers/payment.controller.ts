@@ -1,148 +1,160 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { validationResult } from 'express-validator';
 import { AppError } from '../utils/appError.util';
 import { asyncHandler } from '../utils/asyncHandler.util';
 import StripeService from '../services/stripe.service';
 import logger from '../config/logger';
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
 import SlotLock from '../models/slot-lock.model';
 import Appointment from '../models/appointment.model';
 import User from '../models/user.model';
 
 export const createPaymentIntent = asyncHandler(async (req: Request, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        throw new AppError('Validation Error', 400);
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw new AppError('Validation Error', 400);
+  }
+
+  const { amount, currency = 'usd', customerId, metadata } = req.body;
+
+  // Validate payment amount
+  if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0) {
+    throw new AppError('Amount must be a positive number', 400);
+  }
+  if (amount < 50) {
+    throw new AppError('Amount must be at least 50 (Stripe minimum: 50 cents)', 400);
+  }
+  if (amount > 999999) {
+    throw new AppError('Amount exceeds maximum allowed value', 400);
+  }
+
+  try {
+    // Get userId from metadata (passed from client) or from authenticated user
+    const userId =
+      metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
+
+    // Auto-create or find Stripe customer for the user
+    let stripeCustomerId = customerId;
+    const clerkId = metadata?.clerkUserId || (req as any).auth?.userId;
+    if (!stripeCustomerId && clerkId) {
+      const user = await User.findOne({ clerkId });
+      if (user) {
+        if (user.stripeCustomerId) {
+          stripeCustomerId = user.stripeCustomerId;
+        } else {
+          // Create a new Stripe customer and save to user
+          const customer = await StripeService.createCustomer({
+            email: user.email,
+            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+            phone: user.phone,
+          });
+          user.stripeCustomerId = customer.id;
+          await user.save();
+          stripeCustomerId = customer.id;
+          logger.info(`Created and saved Stripe customer ${customer.id} for user ${clerkId}`);
+        }
+      }
     }
 
-    const { amount, currency = 'usd', customerId, metadata } = req.body;
+    const paymentIntent = await StripeService.createPaymentIntent({
+      amount,
+      currency,
+      customerId: stripeCustomerId,
+      metadata: {
+        ...metadata,
+        userId,
+      },
+    });
 
-    try {
-        // Get userId from metadata (passed from client) or from authenticated user
-        const userId = metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
-
-        // Auto-create or find Stripe customer for the user
-        let stripeCustomerId = customerId;
-        const clerkId = metadata?.clerkUserId || (req as any).auth?.userId;
-        if (!stripeCustomerId && clerkId) {
-            const user = await User.findOne({ clerkId });
-            if (user) {
-                if (user.stripeCustomerId) {
-                    stripeCustomerId = user.stripeCustomerId;
-                } else {
-                    // Create a new Stripe customer and save to user
-                    const customer = await StripeService.createCustomer({
-                        email: user.email,
-                        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
-                        phone: user.phone,
-                    });
-                    user.stripeCustomerId = customer.id;
-                    await user.save();
-                    stripeCustomerId = customer.id;
-                    logger.info(`Created and saved Stripe customer ${customer.id} for user ${clerkId}`);
-                }
-            }
-        }
-
-        const paymentIntent = await StripeService.createPaymentIntent({
-            amount,
-            currency,
-            customerId: stripeCustomerId,
-            metadata: {
-                ...metadata,
-                userId,
-            }
-        });
-
-        // Create ephemeral key for Payment Sheet (enables saved cards + Apple/Google Pay)
-        let ephemeralKey: string | undefined;
-        if (stripeCustomerId) {
-            try {
-                const key = await StripeService.createEphemeralKey(stripeCustomerId);
-                ephemeralKey = key.secret;
-            } catch (err: any) {
-                logger.warn(`Failed to create ephemeral key: ${err.message}`);
-            }
-        }
-
-        res.status(200).json({
-            success: true,
-            data: {
-                client_secret: paymentIntent.client_secret,
-                paymentIntentId: paymentIntent.id,
-                ephemeralKey,
-                customerId: stripeCustomerId,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error creating payment intent: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to create payment intent',
-            error: error.message
-        });
+    // Create ephemeral key for Payment Sheet (enables saved cards + Apple/Google Pay)
+    let ephemeralKey: string | undefined;
+    if (stripeCustomerId) {
+      try {
+        const key = await StripeService.createEphemeralKey(stripeCustomerId);
+        ephemeralKey = key.secret;
+      } catch (err: any) {
+        logger.warn(`Failed to create ephemeral key: ${err.message}`);
+      }
     }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        client_secret: paymentIntent.client_secret,
+        paymentIntentId: paymentIntent.id,
+        ephemeralKey,
+        customerId: stripeCustomerId,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error creating payment intent: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create payment intent',
+      error: error.message,
+    });
+  }
 });
 
 export const confirmPayment = asyncHandler(async (req: Request, res: Response) => {
-    const { paymentIntentId } = req.body;
+  const { paymentIntentId } = req.body;
 
-    if (!paymentIntentId) {
-        throw new AppError('Payment intent ID is required', 400);
-    }
+  if (!paymentIntentId) {
+    throw new AppError('Payment intent ID is required', 400);
+  }
 
-    try {
-        const paymentIntent = await StripeService.confirmPaymentIntent(paymentIntentId);
+  try {
+    const paymentIntent = await StripeService.confirmPaymentIntent(paymentIntentId);
 
-        res.status(200).json({
-            success: true,
-            data: {
-                id: paymentIntent.id,
-                status: paymentIntent.status,
-                amount: paymentIntent.amount / 100,
-                currency: paymentIntent.currency,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error confirming payment: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to confirm payment',
-            error: error.message
-        });
-    }
+    res.status(200).json({
+      success: true,
+      data: {
+        id: paymentIntent.id,
+        status: paymentIntent.status,
+        amount: paymentIntent.amount / 100,
+        currency: paymentIntent.currency,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error confirming payment: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to confirm payment',
+      error: error.message,
+    });
+  }
 });
 
 export const createStripeCustomer = asyncHandler(async (req: Request, res: Response) => {
-    const { email, name, phone } = req.body;
+  const { email, name, phone } = req.body;
 
-    if (!email || !name) {
-        throw new AppError('Email and name are required', 400);
-    }
+  if (!email || !name) {
+    throw new AppError('Email and name are required', 400);
+  }
 
-    try {
-        const customer = await StripeService.createCustomer({
-            email,
-            name,
-            phone
-        });
+  try {
+    const customer = await StripeService.createCustomer({
+      email,
+      name,
+      phone,
+    });
 
-        res.status(200).json({
-            success: true,
-            data: {
-                customerId: customer.id,
-                email: customer.email,
-                name: customer.name,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error creating Stripe customer: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to create customer',
-            error: error.message
-        });
-    }
+    res.status(200).json({
+      success: true,
+      data: {
+        customerId: customer.id,
+        email: customer.email,
+        name: customer.name,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error creating Stripe customer: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create customer',
+      error: error.message,
+    });
+  }
 });
 
 // export const handleWebhook = asyncHandler(async (req: Request, res: Response) => {
@@ -177,367 +189,349 @@ export const createStripeCustomer = asyncHandler(async (req: Request, res: Respo
 // });
 
 export const handleWebhook = asyncHandler(async (req: Request, res: Response) => {
-    const payload = req.body;
-    const signature = req.headers['stripe-signature'] as string;
+  const payload = req.body;
+  const signature = req.headers['stripe-signature'] as string;
 
-    try {
-        const event = await StripeService.constructWebhookEvent(payload, signature);
+  try {
+    const event = await StripeService.constructWebhookEvent(payload, signature);
 
-        switch (event.type) {
-            case 'checkout.session.completed':
-                const session = event.data.object as Stripe.Checkout.Session;
-                logger.info(`Payment successful for session: ${session.id}`);
-                // Handle successful payment here - create booking, etc.
-                break;
-            case 'payment_intent.succeeded':
-                const paymentIntent = event.data.object as Stripe.PaymentIntent;
-                logger.info(`Payment for ${paymentIntent.amount} succeeded!`);
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object as Stripe.Checkout.Session;
+        logger.info(`Payment successful for session: ${session.id}`);
+        // Handle successful payment here - create booking, etc.
+        break;
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        logger.info(`Payment for ${paymentIntent.amount} succeeded!`);
 
-                // Release slot lock upon successful payment
-                if (paymentIntent.id) {
-                    try {
-                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: paymentIntent.id });
-                        if (deletedLock) {
-                            logger.info(`Slot lock released for payment intent: ${paymentIntent.id}`);
-                        }
-                    } catch (lockError: any) {
-                        logger.error(`Error releasing slot lock: ${lockError.message}`);
-                    }
-                }
-                break;
-            case 'payment_intent.payment_failed':
-                const failedPayment = event.data.object as Stripe.PaymentIntent;
-                logger.error(`Payment for ${failedPayment.amount} failed!`);
-
-                // Release slot lock on payment failure so another user can book
-                if (failedPayment.id) {
-                    try {
-                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: failedPayment.id });
-                        if (deletedLock) {
-                            logger.info(`Slot lock released after payment failure: ${failedPayment.id}`);
-                        }
-                    } catch (lockError: any) {
-                        logger.error(`Error releasing slot lock on failure: ${lockError.message}`);
-                    }
-                }
-                break;
-            case 'payment_intent.canceled':
-                const canceledPayment = event.data.object as Stripe.PaymentIntent;
-                logger.info(`Payment intent canceled: ${canceledPayment.id}`);
-
-                // Release slot lock on cancellation
-                if (canceledPayment.id) {
-                    try {
-                        const deletedLock = await SlotLock.findOneAndDelete({ paymentIntentId: canceledPayment.id });
-                        if (deletedLock) {
-                            logger.info(`Slot lock released after payment cancellation: ${canceledPayment.id}`);
-                        }
-                    } catch (lockError: any) {
-                        logger.error(`Error releasing slot lock on cancellation: ${lockError.message}`);
-                    }
-                }
-                break;
-            default:
-                logger.info(`Unhandled event type ${event.type}`);
+        // Release slot lock upon successful payment
+        if (paymentIntent.id) {
+          try {
+            const deletedLock = await SlotLock.findOneAndDelete({
+              paymentIntentId: paymentIntent.id,
+            });
+            if (deletedLock) {
+              logger.info(`Slot lock released for payment intent: ${paymentIntent.id}`);
+            }
+          } catch (lockError: any) {
+            logger.error(`Error releasing slot lock: ${lockError.message}`);
+          }
         }
+        break;
+      case 'payment_intent.payment_failed':
+        const failedPayment = event.data.object as Stripe.PaymentIntent;
+        logger.error(`Payment for ${failedPayment.amount} failed!`);
 
-        res.status(200).json({ received: true });
-    } catch (error: any) {
-        logger.error(`Webhook error: ${error.message}`);
-        res.status(400).json({
-            success: false,
-            message: 'Webhook signature verification failed',
-            error: error.message
-        });
+        // Release slot lock on payment failure so another user can book
+        if (failedPayment.id) {
+          try {
+            const deletedLock = await SlotLock.findOneAndDelete({
+              paymentIntentId: failedPayment.id,
+            });
+            if (deletedLock) {
+              logger.info(`Slot lock released after payment failure: ${failedPayment.id}`);
+            }
+          } catch (lockError: any) {
+            logger.error(`Error releasing slot lock on failure: ${lockError.message}`);
+          }
+        }
+        break;
+      case 'payment_intent.canceled':
+        const canceledPayment = event.data.object as Stripe.PaymentIntent;
+        logger.info(`Payment intent canceled: ${canceledPayment.id}`);
+
+        // Release slot lock on cancellation
+        if (canceledPayment.id) {
+          try {
+            const deletedLock = await SlotLock.findOneAndDelete({
+              paymentIntentId: canceledPayment.id,
+            });
+            if (deletedLock) {
+              logger.info(`Slot lock released after payment cancellation: ${canceledPayment.id}`);
+            }
+          } catch (lockError: any) {
+            logger.error(`Error releasing slot lock on cancellation: ${lockError.message}`);
+          }
+        }
+        break;
+      default:
+        logger.info(`Unhandled event type ${event.type}`);
     }
+
+    res.status(200).json({ received: true });
+  } catch (error: any) {
+    logger.error(`Webhook error: ${error.message}`);
+    res.status(400).json({
+      success: false,
+      message: 'Webhook signature verification failed',
+      error: error.message,
+    });
+  }
 });
 
 export const refundPayment = asyncHandler(async (req: Request, res: Response) => {
-    const { paymentIntentId, amount } = req.body;
+  const { paymentIntentId, amount } = req.body;
 
-    if (!paymentIntentId) {
-        throw new AppError('Payment intent ID is required', 400);
-    }
+  if (!paymentIntentId) {
+    throw new AppError('Payment intent ID is required', 400);
+  }
 
-    try {
-        const refund = await StripeService.refundPayment(paymentIntentId, amount);
+  // Verify the requesting user owns the appointment associated with this payment
+  const appointment = await Appointment.findOne({ paymentIntentId });
+  if (!appointment) {
+    throw new AppError('No appointment found for this payment', 404);
+  }
+  const requestingUserId = (req as any).user?._id;
+  if (!requestingUserId || String(appointment.customerId) !== String(requestingUserId)) {
+    throw new AppError('You are not authorized to refund this payment', 403);
+  }
 
-        res.status(200).json({
-            success: true,
-            data: {
-                refundId: refund.id,
-                amount: refund.amount ? refund.amount / 100 : 0,
-                status: refund.status,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error processing refund: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to process refund',
-            error: error.message
-        });
-    }
+  try {
+    const refund = await StripeService.refundPayment(paymentIntentId, amount);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        refundId: refund.id,
+        amount: refund.amount ? refund.amount / 100 : 0,
+        status: refund.status,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error processing refund: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process refund',
+      error: error.message,
+    });
+  }
 });
 
 export const confirmWithMethod = asyncHandler(async (req: Request, res: Response) => {
-    try {
-        const { paymentIntentId, paymentMethodId, returnUrl } = req.body;
+  try {
+    const { paymentIntentId, paymentMethodId, returnUrl } = req.body;
 
-        const paymentIntent = await StripeService.confirmPaymentWithPaymentMethod(
-            paymentIntentId,
-            paymentMethodId,
-            returnUrl
-        );
+    const paymentIntent = await StripeService.confirmPaymentWithPaymentMethod(
+      paymentIntentId,
+      paymentMethodId,
+      returnUrl,
+    );
 
-        res.status(200).json({
-            success: true,
-            data: {
-                id: paymentIntent.id,
-                status: paymentIntent.status,
-                amount: paymentIntent.amount / 100,
-                currency: paymentIntent.currency,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error confirming payment with method: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-})
+    res.status(200).json({
+      success: true,
+      data: {
+        id: paymentIntent.id,
+        status: paymentIntent.status,
+        amount: paymentIntent.amount / 100,
+        currency: paymentIntent.currency,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error confirming payment with method: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
-// Confirm payment using raw card details (Android fallback flow)
+// Raw card handling removed for PCI-DSS compliance.
+// Clients must use Stripe Payment Sheet for secure card payments.
 export const confirmWithCard = asyncHandler(async (req: Request, res: Response) => {
-    try {
-        const { payment_intent_id, card_number, exp_month, exp_year, cvc } = req.body;
-
-        if (!payment_intent_id || !card_number || !exp_month || !exp_year || !cvc) {
-            return res.status(400).json({
-                success: false,
-                message: 'Missing required card details',
-            });
-        }
-
-        // Parse expiry - handle both "MM" and "YYYY" or "YY" formats
-        const expMonth = parseInt(exp_month, 10);
-        let expYear = parseInt(exp_year, 10);
-
-        // If year is 2 digits, add 2000
-        if (expYear < 100) {
-            expYear += 2000;
-        }
-
-        const paymentIntent = await StripeService.confirmPaymentWithCard(
-            payment_intent_id,
-            {
-                number: card_number,
-                exp_month: expMonth,
-                exp_year: expYear,
-                cvc: cvc,
-            }
-        );
-
-        res.status(200).json({
-            success: true,
-            data: {
-                id: paymentIntent.id,
-                status: paymentIntent.status,
-                amount: paymentIntent.amount / 100,
-                currency: paymentIntent.currency,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error confirming payment with card: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to process payment',
-        });
-    }
+  res.status(400).json({
+    success: false,
+    message: 'Direct card processing is not supported. Please use Stripe Payment Sheet for secure card payments.',
+  });
 });
 
 export const createCheckoutSession = asyncHandler(async (req: Request, res: Response) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        throw new AppError('Validation Error', 400);
-    }
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    throw new AppError('Validation Error', 400);
+  }
 
-    const { amount, currency = 'usd', metadata, successUrl, cancelUrl } = req.body;
+  const { amount, currency = 'usd', metadata, successUrl, cancelUrl } = req.body;
 
-    try {
-        // Get userId from metadata (passed from client) or from authenticated user
-        const userId = metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
+  try {
+    // Get userId from metadata (passed from client) or from authenticated user
+    const userId =
+      metadata?.backendUserId || metadata?.clerkUserId || (req as any).user?.id || 'guest';
 
-        const session = await StripeService.createCheckoutSession({
-            amount,
-            currency,
-            metadata: {
-                ...metadata,
-                userId,
-            },
-            successUrl,
-            cancelUrl,
-        });
+    const session = await StripeService.createCheckoutSession({
+      amount,
+      currency,
+      metadata: {
+        ...metadata,
+        userId,
+      },
+      successUrl,
+      cancelUrl,
+    });
 
-        res.status(200).json({
-            success: true,
-            data: {
-                sessionId: session.id,
-                checkoutUrl: session.url,
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error creating checkout session: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to create checkout session',
-            error: error.message
-        });
-    }
+    res.status(200).json({
+      success: true,
+      data: {
+        sessionId: session.id,
+        checkoutUrl: session.url,
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error creating checkout session: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create checkout session',
+      error: error.message,
+    });
+  }
 });
 
 // Get payment history for a user
 export const getPaymentHistory = asyncHandler(async (req: Request, res: Response) => {
-    const userId = (req as any).auth?.userId;
-    const { page = 1, limit = 20, status } = req.query;
+  const userId = (req as any).auth?.userId;
+  const { page = 1, limit = 20, status } = req.query;
 
-    if (!userId) {
-        throw new AppError('User not authenticated', 401);
+  if (!userId) {
+    throw new AppError('User not authenticated', 401);
+  }
+
+  try {
+    // Find user by clerkId
+    const User = require('../models/user.model').default;
+    const user = await User.findOne({ clerkId: userId });
+
+    if (!user) {
+      throw new AppError('User not found', 404);
     }
 
-    try {
-        // Find user by clerkId
-        const User = require('../models/user.model').default;
-        const user = await User.findOne({ clerkId: userId });
+    // Build query
+    const query: any = {
+      customerId: user._id,
+      paymentIntentId: { $exists: true, $ne: null },
+    };
 
-        if (!user) {
-            throw new AppError('User not found', 404);
-        }
-
-        // Build query
-        const query: any = {
-            customerId: user._id,
-            paymentIntentId: { $exists: true, $ne: null }
-        };
-
-        // Filter by payment status if provided
-        if (status && ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'].includes(status as string)) {
-            query.paymentStatus = status;
-        }
-
-        const pageNum = parseInt(page as string, 10);
-        const limitNum = parseInt(limit as string, 10);
-        const skip = (pageNum - 1) * limitNum;
-
-        // Get total count
-        const total = await Appointment.countDocuments(query);
-
-        // Get payment history with service details
-        const payments = await Appointment.find(query)
-            .populate({
-                path: 'vendorServiceId',
-                populate: [
-                    { path: 'vendorId', select: 'vendorName vendorLogo' },
-                    { path: 'serviceId', select: 'name' }
-                ]
-            })
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limitNum)
-            .lean();
-
-        // Format response
-        const formattedPayments = payments.map((payment: any) => ({
-            id: payment._id,
-            paymentIntentId: payment.paymentIntentId,
-            amount: payment.total || payment.serviceFee,
-            serviceFee: payment.serviceFee,
-            discountAmount: payment.discountAmount || 0,
-            walletAmount: payment.walletAmount || 0,
-            paymentMode: payment.paymentMode,
-            paymentStatus: payment.paymentStatus,
-            refundId: payment.refundId,
-            refundStatus: payment.refundStatus,
-            refundAmount: payment.refundAmount,
-            appointmentDate: payment.appointmentDate,
-            startTime: payment.startTime,
-            endTime: payment.endTime,
-            status: payment.status,
-            serviceName: payment.vendorServiceId?.serviceId?.name || 'Unknown Service',
-            vendorName: payment.vendorServiceId?.vendorId?.vendorName || 'Unknown Vendor',
-            vendorLogo: payment.vendorServiceId?.vendorId?.vendorLogo,
-            createdAt: payment.createdAt,
-            updatedAt: payment.updatedAt
-        }));
-
-        res.status(200).json({
-            success: true,
-            data: {
-                payments: formattedPayments,
-                pagination: {
-                    total,
-                    page: pageNum,
-                    limit: limitNum,
-                    pages: Math.ceil(total / limitNum)
-                }
-            }
-        });
-    } catch (error: any) {
-        logger.error(`Error fetching payment history: ${error.message}`);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to fetch payment history',
-            error: error.message
-        });
+    // Filter by payment status if provided
+    if (
+      status &&
+      ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'].includes(
+        status as string,
+      )
+    ) {
+      query.paymentStatus = status;
     }
+
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get total count
+    const total = await Appointment.countDocuments(query);
+
+    // Get payment history with service details
+    const payments = await Appointment.find(query)
+      .populate({
+        path: 'vendorServiceId',
+        populate: [
+          { path: 'vendorId', select: 'vendorName vendorLogo' },
+          { path: 'serviceId', select: 'name' },
+        ],
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Format response
+    const formattedPayments = payments.map((payment: any) => ({
+      id: payment._id,
+      paymentIntentId: payment.paymentIntentId,
+      amount: payment.total || payment.serviceFee,
+      serviceFee: payment.serviceFee,
+      discountAmount: payment.discountAmount || 0,
+      walletAmount: payment.walletAmount || 0,
+      paymentMode: payment.paymentMode,
+      paymentStatus: payment.paymentStatus,
+      refundId: payment.refundId,
+      refundStatus: payment.refundStatus,
+      refundAmount: payment.refundAmount,
+      appointmentDate: payment.appointmentDate,
+      startTime: payment.startTime,
+      endTime: payment.endTime,
+      status: payment.status,
+      serviceName: payment.vendorServiceId?.serviceId?.name || 'Unknown Service',
+      vendorName: payment.vendorServiceId?.vendorId?.vendorName || 'Unknown Vendor',
+      vendorLogo: payment.vendorServiceId?.vendorId?.vendorLogo,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        payments: formattedPayments,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          pages: Math.ceil(total / limitNum),
+        },
+      },
+    });
+  } catch (error: any) {
+    logger.error(`Error fetching payment history: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch payment history',
+      error: error.message,
+    });
+  }
 });
 
 export const getSavedPaymentMethods = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { clerkId } = req.params;
-        if (!clerkId) {
-            res.status(400).json({ success: false, message: 'clerkId is required' });
-            return;
-        }
-
-        const user = await User.findOne({ clerkId });
-        if (!user) {
-            res.status(404).json({ success: false, message: 'User not found' });
-            return;
-        }
-
-        if (!user.stripeCustomerId) {
-            res.status(200).json({ success: true, data: [] });
-            return;
-        }
-
-        const methods = await StripeService.listPaymentMethods(user.stripeCustomerId);
-        const formatted = methods.map((m: any) => ({
-            id: m.id,
-            brand: m.card?.brand,
-            last4: m.card?.last4,
-            expMonth: m.card?.exp_month,
-            expYear: m.card?.exp_year,
-        }));
-
-        res.status(200).json({ success: true, data: formatted });
-    } catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
+  try {
+    const { clerkId } = req.params;
+    if (!clerkId) {
+      res.status(400).json({ success: false, message: 'clerkId is required' });
+      return;
     }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    if (!user.stripeCustomerId) {
+      res.status(200).json({ success: true, data: [] });
+      return;
+    }
+
+    const methods = await StripeService.listPaymentMethods(user.stripeCustomerId);
+    const formatted = methods.map((m: any) => ({
+      id: m.id,
+      brand: m.card?.brand,
+      last4: m.card?.last4,
+      expMonth: m.card?.exp_month,
+      expYear: m.card?.exp_year,
+    }));
+
+    res.status(200).json({ success: true, data: formatted });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 export const deleteSavedPaymentMethod = async (req: Request, res: Response): Promise<void> => {
-    try {
-        const { paymentMethodId } = req.params;
-        if (!paymentMethodId) {
-            res.status(400).json({ success: false, message: 'paymentMethodId is required' });
-            return;
-        }
-
-        await StripeService.detachPaymentMethod(paymentMethodId);
-        res.status(200).json({ success: true, message: 'Payment method removed' });
-    } catch (error: any) {
-        res.status(500).json({ success: false, message: error.message });
+  try {
+    const { paymentMethodId } = req.params;
+    if (!paymentMethodId) {
+      res.status(400).json({ success: false, message: 'paymentMethodId is required' });
+      return;
     }
+
+    await StripeService.detachPaymentMethod(paymentMethodId);
+    res.status(200).json({ success: true, message: 'Payment method removed' });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };

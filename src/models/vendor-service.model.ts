@@ -1,146 +1,151 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IVendorService } from './../interfaces/vendor-service.interface';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { IVendorService } from './../interfaces/vendor-service.interface';
 
 const SocialMediaLinkSchema: Schema = new Schema({
-    mediaName: {
-        type: String
-    },
-    mediaLink: {
-        type: String
-    }
+  mediaName: {
+    type: String,
+  },
+  mediaLink: {
+    type: String,
+  },
 });
 
 const DescriptionSchema: Schema = new Schema({
-    title: {
-        type: String
-    },
-    type: {
-        type: String
-    },
-    content: {
-        type: [String]
-    }
+  title: {
+    type: String,
+  },
+  type: {
+    type: String,
+  },
+  content: {
+    type: [String],
+  },
 });
 
-
-const VendorServiceSchema: Schema = new Schema({
+const VendorServiceSchema: Schema = new Schema(
+  {
     categoryId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Category',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
+      required: true,
     },
     subCategoryId: {
-        type: Schema.Types.ObjectId,
-        ref: 'SubCategory',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      required: true,
     },
     serviceId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Service',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'Service',
+      required: true,
     },
     vendorId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Vendor',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'Vendor',
+      required: true,
     },
     name: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     subTitle: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     shortDescriptionType: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     shortDescription: {
-        type: [String],
-        required: true
+      type: [String],
+      required: true,
     },
     description: {
-        type: [DescriptionSchema],
-        required: true
+      type: [DescriptionSchema],
+      required: true,
     },
     images: {
-        type: [String]
+      type: [String],
     },
     image: {
-        type: String,
-        default:'service.png'
+      type: String,
+      default: 'service.png',
     },
     price: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     duration: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     servicePlace: {
-        type: String,
-        default: 'vendor'
+      type: String,
+      default: 'vendor',
     },
     serviceType: {
-        type: String,
-        default: 'In Person'
+      type: String,
+      default: 'In Person',
     },
     serviceTypeLink: {
-        type: String,
+      type: String,
     },
     isCombo: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     comboServiceIds: [
-        {
-            type: mongoose.Schema.Types.ObjectId,
-            required: false
-        }
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        required: false,
+      },
     ],
     isActive: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     tags: {
-        type: [String]
+      type: [String],
     },
     socialMediaLinks: {
-        type: [SocialMediaLinkSchema],
-        required: false,
-        default: []
+      type: [SocialMediaLinkSchema],
+      required: false,
+      default: [],
     },
     // Rating fields
     rating: {
-        type: Number,
-        default: 0,
-        min: 0,
-        max: 5
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
     },
     totalReviews: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     ratingSum: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
-}, { 
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 // Indexes for performance optimization
 VendorServiceSchema.index({ name: 1 });
 VendorServiceSchema.index({ serviceId: 1 });
 // Index for vendor's services lookup
 VendorServiceSchema.index({ vendorId: 1 });
+// Compound index for vendor + active status (most common query pattern)
+VendorServiceSchema.index({ vendorId: 1, isActive: 1 });
 // Index for category browsing
 VendorServiceSchema.index({ categoryId: 1 });
 // Index for subcategory browsing

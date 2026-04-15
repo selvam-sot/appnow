@@ -1,5 +1,9 @@
 import express from 'express';
-import { getServiceSlotsByDate, getNearbyAvailableDates, getVendorServicesWithSlots } from './../../controllers/slot.controller';
+import {
+  getServiceSlotsByDate,
+  getNearbyAvailableDates,
+  getVendorServicesWithSlots,
+} from './../../controllers/slot.controller';
 
 const router = express.Router();
 router.post('/slots-by-date', getServiceSlotsByDate);

@@ -1,6 +1,12 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
-import { createAppointment, getAppointments, getAppointmentById, updateAppointment, deleteAppointment } from '../../controllers/appointment.controller';
+import {
+  createAppointment,
+  getAppointments,
+  getAppointmentById,
+  updateAppointment,
+  deleteAppointment,
+} from '../../controllers/appointment.controller';
 import { appointmentValidationRules } from '../../utils/validation.util';
 
 const router = express.Router();

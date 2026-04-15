@@ -1,11 +1,11 @@
 import express from 'express';
 import { body, query } from 'express-validator';
 import {
-    lockSlot,
-    unlockSlot,
-    checkSlotLock,
-    getUserLocks,
-    releaseUserLocks
+  lockSlot,
+  unlockSlot,
+  checkSlotLock,
+  getUserLocks,
+  releaseUserLocks,
 } from '../../controllers/slot-lock.controller';
 import { paymentLimiter } from '../../middlewares/rateLimiter.middleware';
 
@@ -70,13 +70,17 @@ router.use(paymentLimiter);
  *       429:
  *         $ref: '#/components/responses/TooManyRequests'
  */
-router.post('/lock', [
+router.post(
+  '/lock',
+  [
     body('vendorServiceId').notEmpty().withMessage('Vendor service ID is required'),
     body('date').notEmpty().isISO8601().withMessage('Valid date is required'),
     body('fromTime').notEmpty().withMessage('From time is required'),
     body('toTime').notEmpty().withMessage('To time is required'),
-    body('paymentIntentId').optional().isString()
-], lockSlot);
+    body('paymentIntentId').optional().isString(),
+  ],
+  lockSlot,
+);
 
 /**
  * @swagger
@@ -110,13 +114,17 @@ router.post('/lock', [
  *       404:
  *         description: No lock found to release
  */
-router.post('/unlock', [
+router.post(
+  '/unlock',
+  [
     body('paymentIntentId').optional().isString(),
     body('vendorServiceId').optional().isMongoId(),
     body('date').optional().isISO8601(),
     body('fromTime').optional().isString(),
-    body('toTime').optional().isString()
-], unlockSlot);
+    body('toTime').optional().isString(),
+  ],
+  unlockSlot,
+);
 
 /**
  * @swagger
@@ -170,12 +178,16 @@ router.post('/unlock', [
  *                 message:
  *                   type: string
  */
-router.get('/check', [
+router.get(
+  '/check',
+  [
     query('vendorServiceId').notEmpty().withMessage('Vendor service ID is required'),
     query('date').notEmpty().isISO8601().withMessage('Valid date is required'),
     query('fromTime').notEmpty().withMessage('From time is required'),
-    query('toTime').notEmpty().withMessage('To time is required')
-], checkSlotLock);
+    query('toTime').notEmpty().withMessage('To time is required'),
+  ],
+  checkSlotLock,
+);
 
 /**
  * @swagger

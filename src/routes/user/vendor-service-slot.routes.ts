@@ -1,5 +1,9 @@
 import express from 'express';
-import { getVendorServiceSlots, getVendorServiceSlotsByDate, checkSlotAvailability } from './../../controllers/process-vendor-service-slot.controller';
+import {
+  getVendorServiceSlots,
+  getVendorServiceSlotsByDate,
+  checkSlotAvailability,
+} from './../../controllers/process-vendor-service-slot.controller';
 
 const router = express.Router();
 

@@ -1,6 +1,12 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
-import { createService, getServices, getServiceById, updateService, deleteService } from '../../controllers/service.controller';
+import {
+  createService,
+  getServices,
+  getServiceById,
+  updateService,
+  deleteService,
+} from '../../controllers/service.controller';
 
 const router = express.Router();
 

@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import Category from '../models/category.model';
 
 /**
@@ -9,20 +9,20 @@ export const getAllCategories = async (req: Request, res: Response): Promise<voi
   try {
     // Optional query parameters
     const { isActive, isFavorite } = req.query;
-    
+
     // Build filter object
     const filter: Record<string, any> = {};
-    
+
     if (isActive !== undefined) {
       filter.isActive = isActive === 'true';
     }
-    
+
     if (isFavorite !== undefined) {
       filter.isFavorite = isFavorite === 'true';
     }
 
     const categories = await Category.find(filter).sort({ categoryName: 1 });
-    
+
     res.status(200).json({
       success: true,
       count: categories.length,
@@ -80,7 +80,7 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'ValidationError') {
-      const messages = Object.values((error as any).errors).map(val => (val as any).message);
+      const messages = Object.values((error as any).errors).map((val) => (val as any).message);
       res.status(400).json({
         success: false,
         error: 'Validation Error',
@@ -108,14 +108,10 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
  */
 export const updateCategory = async (req: Request, res: Response): Promise<void> => {
   try {
-    const category = await Category.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      {
-        new: true, // Return updated document
-        runValidators: true, // Validate the update operation
-      }
-    );
+    const category = await Category.findByIdAndUpdate(req.params.id, req.body, {
+      new: true, // Return updated document
+      runValidators: true, // Validate the update operation
+    });
 
     if (!category) {
       res.status(404).json({
@@ -182,7 +178,7 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
 export const toggleFavorite = async (req: Request, res: Response): Promise<void> => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       res.status(404).json({
         success: false,
@@ -190,11 +186,11 @@ export const toggleFavorite = async (req: Request, res: Response): Promise<void>
       });
       return;
     }
-    
+
     // Toggle the favorite status
     category.isFavorite = !category.isFavorite;
     await category.save();
-    
+
     res.status(200).json({
       success: true,
       data: category,
@@ -215,7 +211,7 @@ export const toggleFavorite = async (req: Request, res: Response): Promise<void>
 export const toggleActive = async (req: Request, res: Response): Promise<void> => {
   try {
     const category = await Category.findById(req.params.id);
-    
+
     if (!category) {
       res.status(404).json({
         success: false,
@@ -223,11 +219,11 @@ export const toggleActive = async (req: Request, res: Response): Promise<void> =
       });
       return;
     }
-    
+
     // Toggle the active status
     category.isActive = !category.isActive;
     await category.save();
-    
+
     res.status(200).json({
       success: true,
       data: category,
@@ -243,14 +239,14 @@ export const toggleActive = async (req: Request, res: Response): Promise<void> =
 
 // General functions
 export const getCategoryList = async (req: Request, res: Response) => {
-  try {    
+  try {
     // Build filter object
     const filter: Record<string, any> = {
-      isActive: true
+      isActive: true,
     };
 
     const categories = await Category.find(filter).sort({ name: 1 });
-    
+
     res.status(200).json({
       success: true,
       count: categories.length,

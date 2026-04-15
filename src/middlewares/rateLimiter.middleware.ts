@@ -1,5 +1,6 @@
 import rateLimit from 'express-rate-limit';
-import { Request, Response } from 'express';
+import type { Request} from 'express';
+import { Response } from 'express';
 
 /**
  * Rate limiter for general API requests
@@ -7,22 +8,22 @@ import { Request, Response } from 'express';
  * Allows 100 requests per 15 minutes per IP in production
  */
 export const generalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: process.env.NODE_ENV === 'production' ? 100 : 2000, // Much higher limit for development
-    message: {
-        success: false,
-        message: 'Too many requests from this IP, please try again after 15 minutes'
-    },
-    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    skip: (req: Request) => {
-        // Skip rate limiting in development for localhost
-        if (process.env.NODE_ENV !== 'production') {
-            const ip = req.ip || req.socket.remoteAddress || '';
-            return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-        }
-        return false;
-    },
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 100 : 2000, // Much higher limit for development
+  message: {
+    success: false,
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: (req: Request) => {
+    // Skip rate limiting in development for localhost
+    if (process.env.NODE_ENV !== 'production') {
+      const ip = req.ip || req.socket.remoteAddress || '';
+      return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    }
+    return false;
+  },
 });
 
 /**
@@ -31,15 +32,15 @@ export const generalLimiter = rateLimit({
  * Prevents brute-force attacks
  */
 export const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 5, // Limit each IP to 5 login attempts per windowMs
-    message: {
-        success: false,
-        message: 'Too many login attempts from this IP, please try again after 15 minutes'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-    skipSuccessfulRequests: false, // Count all requests
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 login attempts per windowMs
+  message: {
+    success: false,
+    message: 'Too many login attempts from this IP, please try again after 15 minutes',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false, // Count all requests
 });
 
 /**
@@ -47,14 +48,14 @@ export const authLimiter = rateLimit({
  * Allows 3 attempts per hour per IP
  */
 export const passwordResetLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 3, // Limit each IP to 3 requests per hour
-    message: {
-        success: false,
-        message: 'Too many password reset attempts, please try again after an hour'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit each IP to 3 requests per hour
+  message: {
+    success: false,
+    message: 'Too many password reset attempts, please try again after an hour',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
@@ -62,14 +63,14 @@ export const passwordResetLimiter = rateLimit({
  * Allows 10 registrations per hour per IP
  */
 export const registrationLimiter = rateLimit({
-    windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10, // Limit each IP to 10 registrations per hour
-    message: {
-        success: false,
-        message: 'Too many accounts created from this IP, please try again after an hour'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Limit each IP to 10 registrations per hour
+  message: {
+    success: false,
+    message: 'Too many accounts created from this IP, please try again after an hour',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
@@ -77,14 +78,14 @@ export const registrationLimiter = rateLimit({
  * Allows 20 requests per minute per IP
  */
 export const paymentLimiter = rateLimit({
-    windowMs: 60 * 1000, // 1 minute
-    max: 20, // Limit each IP to 20 requests per minute
-    message: {
-        success: false,
-        message: 'Too many payment requests, please try again after a minute'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // Limit each IP to 20 requests per minute
+  message: {
+    success: false,
+    message: 'Too many payment requests, please try again after a minute',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
@@ -92,33 +93,29 @@ export const paymentLimiter = rateLimit({
  * Allows 30 requests per 15 minutes per IP
  */
 export const sensitiveLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 30, // Limit each IP to 30 requests per windowMs
-    message: {
-        success: false,
-        message: 'Too many requests for this operation, please try again later'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 30, // Limit each IP to 30 requests per windowMs
+  message: {
+    success: false,
+    message: 'Too many requests for this operation, please try again later',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 /**
  * Dynamic rate limiter factory
  * Creates a custom rate limiter with specified parameters
  */
-export const createRateLimiter = (
-    windowMinutes: number,
-    maxRequests: number,
-    message?: string
-) => {
-    return rateLimit({
-        windowMs: windowMinutes * 60 * 1000,
-        max: maxRequests,
-        message: {
-            success: false,
-            message: message || `Too many requests, please try again after ${windowMinutes} minutes`
-        },
-        standardHeaders: true,
-        legacyHeaders: false,
-    });
+export const createRateLimiter = (windowMinutes: number, maxRequests: number, message?: string) => {
+  return rateLimit({
+    windowMs: windowMinutes * 60 * 1000,
+    max: maxRequests,
+    message: {
+      success: false,
+      message: message || `Too many requests, please try again after ${windowMinutes} minutes`,
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 };

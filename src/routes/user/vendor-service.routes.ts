@@ -1,6 +1,10 @@
 import express from 'express';
 
-import { getVendorServiceById, getVendorServiceList, searchVendorServices } from './../../controllers/vendor-service.controller';
+import {
+  getVendorServiceById,
+  getVendorServiceList,
+  searchVendorServices,
+} from './../../controllers/vendor-service.controller';
 import { cacheVendorServices } from '../../middlewares/cache.middleware';
 
 const router = express.Router();

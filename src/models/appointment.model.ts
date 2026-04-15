@@ -1,155 +1,159 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IAppointment } from './../interfaces/appointment.interface';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { IAppointment } from './../interfaces/appointment.interface';
 
 const CardDetailsSchema: Schema = new Schema({
-    cardNumber: {
-        type: String
-    },
-    cardHolderName: {
-        type: String
-    },
-    expiryMonth: {
-        type: String
-    },
-    expiryYear: {
-        type: String
-    },
-    cvv: {
-        type: String
-    }
+  cardNumber: {
+    type: String,
+  },
+  cardHolderName: {
+    type: String,
+  },
+  expiryMonth: {
+    type: String,
+  },
+  expiryYear: {
+    type: String,
+  },
+  cvv: {
+    type: String,
+  },
 });
 
 const CustomerAddressSchema: Schema = new Schema({
-    address1: {
-        type: String
-    },
-    address2: {
-        type: String
-    },
-    city: {
-        type: String
-    },
-    state: {
-        type: String
-    },
-    zip: {
-        type: String
-    }
+  address1: {
+    type: String,
+  },
+  address2: {
+    type: String,
+  },
+  city: {
+    type: String,
+  },
+  state: {
+    type: String,
+  },
+  zip: {
+    type: String,
+  },
 });
-const AppointmentSchema: Schema = new Schema({
-    customerId: { 
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+const AppointmentSchema: Schema = new Schema(
+  {
+    customerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
     },
-    vendorServiceId: { 
-        type: Schema.Types.ObjectId,
-        ref: 'VendorService',
-        required: true
+    vendorServiceId: {
+      type: Schema.Types.ObjectId,
+      ref: 'VendorService',
+      required: true,
     },
     servicePlace: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
-    appointmentDate: { 
-        type: Date,
-        required: true
+    appointmentDate: {
+      type: Date,
+      required: true,
     },
     startTime: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     endTime: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     customerAddress: {
-        type: CustomerAddressSchema
+      type: CustomerAddressSchema,
     },
     customerNotes: {
-        type: String
+      type: String,
     },
     serviceFee: {
-        type: Number,
-        required: true
+      type: Number,
+      required: true,
     },
     discountAmount: {
-        type: Number
+      type: Number,
     },
     walletAmount: {
-        type: Number
+      type: Number,
     },
     total: {
-        type: Number
+      type: Number,
     },
     paymentMode: {
-        type: String
+      type: String,
     },
     cardDetails: {
-        type: CardDetailsSchema
+      type: CardDetailsSchema,
     },
     status: {
-        type: String,
-        enum: ['pending', 'confirmed', 'cancelled', 'completed', 'missed', 'failed'],
-        default: 'pending'
+      type: String,
+      enum: ['pending', 'confirmed', 'cancelled', 'completed', 'missed', 'failed'],
+      default: 'pending',
     },
     paymentIntentId: {
-        type: String
+      type: String,
     },
     paymentStatus: {
-        type: String,
-        enum: ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'],
-        default: 'pending'
+      type: String,
+      enum: ['pending', 'completed', 'refunded', 'partially_refunded', 'failed'],
+      default: 'pending',
     },
     // Refund fields
     refundId: {
-        type: String
+      type: String,
     },
     refundStatus: {
-        type: String,
-        enum: ['pending', 'processing', 'succeeded', 'failed', 'cancelled'],
+      type: String,
+      enum: ['pending', 'processing', 'succeeded', 'failed', 'cancelled'],
     },
     refundAmount: {
-        type: Number
+      type: Number,
     },
     cancelledAt: {
-        type: Date
+      type: Date,
     },
     cancellationReason: {
-        type: String
+      type: String,
     },
     // Completion tracking fields
     completedAt: {
-        type: Date
+      type: Date,
     },
     statusChangedBy: {
-        type: String,
-        enum: ['auto', 'vendor', 'customer', 'admin']
+      type: String,
+      enum: ['auto', 'vendor', 'customer', 'admin'],
     },
     statusReason: {
-        type: String
+      type: String,
     },
     // Reminder tracking fields
     reminder24hSentAt: {
-        type: Date
+      type: Date,
     },
     reminder1hSentAt: {
-        type: Date
+      type: Date,
     },
     reminder2hSentAt: {
-        type: Date
+      type: Date,
     },
     reminderPostSentAt: {
-        type: Date
-    }
-}, {
+      type: Date,
+    },
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 // Indexes for performance optimization
 // Index for customer appointments lookup

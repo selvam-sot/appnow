@@ -1,141 +1,145 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IVendor } from './../interfaces/vendor.interface';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { IVendor } from './../interfaces/vendor.interface';
 
 const SocialMediaLinkSchema: Schema = new Schema({
-    mediaName: {
-        type: String
-    },
-    mediaLink: {
-        type: String
-    }
+  mediaName: {
+    type: String,
+  },
+  mediaLink: {
+    type: String,
+  },
 });
 
-const VendorSchema: Schema = new Schema({
+const VendorSchema: Schema = new Schema(
+  {
     vendorName: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     serviceProviderName: {
-        type: String,
+      type: String,
     },
     aboutDescription: {
-        type: String,
+      type: String,
     },
     country: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     state: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     city: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     zip: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     address1: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     address2: {
-        type: String
+      type: String,
     },
     location: {
-        type: String
+      type: String,
     },
     email: {
-        type: String,
+      type: String,
     },
     phone: {
-        type: String,
+      type: String,
     },
     website: {
-        type: String,
+      type: String,
     },
     images: {
-        type: [String]
+      type: [String],
     },
     image: {
-        type: String,
-        default:'vendor.png'
+      type: String,
+      default: 'vendor.png',
     },
     specialists: {
-        type: [String]
+      type: [String],
     },
     amenities: {
-        type: [String]
+      type: [String],
     },
     tags: {
-        type: [String]
+      type: [String],
     },
     socialMediaLinks: {
-        type: [SocialMediaLinkSchema],
-        required: false,
-        default: []
+      type: [SocialMediaLinkSchema],
+      required: false,
+      default: [],
     },
     rating: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     isActive: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     isFavorite: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     isFreelancer: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     // Verification fields
     verificationStatus: {
-        type: String,
-        enum: ['pending', 'verified', 'rejected'],
-        default: 'pending'
+      type: String,
+      enum: ['pending', 'verified', 'rejected'],
+      default: 'pending',
     },
     verificationNotes: {
-        type: String
+      type: String,
     },
     verifiedAt: {
-        type: Date
+      type: Date,
     },
     verifiedBy: {
-        type: Schema.Types.ObjectId,
-        ref: 'User'
+      type: Schema.Types.ObjectId,
+      ref: 'User',
     },
     // Business documents
     businessLicense: {
-        type: String
+      type: String,
     },
     taxId: {
-        type: String
+      type: String,
     },
     // Reference to User record (for vendor login)
     userId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        unique: true,
-        sparse: true
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      unique: true,
+      sparse: true,
     },
     // Review stats
     totalReviews: {
-        type: Number,
-        default: 0
-    }
-}, {
+      type: Number,
+      default: 0,
+    },
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 // Indexes for performance optimization
 // Index for vendor name search

@@ -1,56 +1,60 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 export interface ISlotLock {
-    vendorServiceId: mongoose.Types.ObjectId;
-    date: Date;
-    fromTime: string;
-    toTime: string;
-    lockedBy: mongoose.Types.ObjectId;
-    paymentIntentId?: string;
-    lockedAt: Date;
-    expiresAt: Date;
+  vendorServiceId: mongoose.Types.ObjectId;
+  date: Date;
+  fromTime: string;
+  toTime: string;
+  lockedBy: mongoose.Types.ObjectId;
+  paymentIntentId?: string;
+  lockedAt: Date;
+  expiresAt: Date;
 }
 
 export interface ISlotLockDocument extends ISlotLock, Document {}
 
-const SlotLockSchema: Schema = new Schema({
+const SlotLockSchema: Schema = new Schema(
+  {
     vendorServiceId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'VendorService',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'VendorService',
+      required: true,
     },
     date: {
-        type: Date,
-        required: true
+      type: Date,
+      required: true,
     },
     fromTime: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     toTime: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     lockedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
     },
     paymentIntentId: {
-        type: String
+      type: String,
     },
     lockedAt: {
-        type: Date,
-        default: Date.now
+      type: Date,
+      default: Date.now,
     },
     expiresAt: {
-        type: Date,
-        required: true,
-        index: { expires: 0 } // TTL index - document deleted when expiresAt is reached
-    }
-}, {
-    timestamps: false
-});
+      type: Date,
+      required: true,
+      index: { expires: 0 }, // TTL index - document deleted when expiresAt is reached
+    },
+  },
+  {
+    timestamps: false,
+  },
+);
 
 // Compound index for efficient lookup
 SlotLockSchema.index({ vendorServiceId: 1, date: 1, fromTime: 1, toTime: 1 }, { unique: true });

@@ -1,84 +1,85 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
 export interface IAuditLog {
-    userId?: mongoose.Types.ObjectId;
-    userEmail?: string;
-    action: string;
-    resource: string;
-    resourceId?: string;
-    method: string;
-    path: string;
-    statusCode: number;
-    ipAddress?: string;
-    userAgent?: string;
-    requestBody?: Record<string, any>;
-    responseTime: number;
-    error?: string;
-    metadata?: Record<string, any>;
-    createdAt: Date;
+  userId?: mongoose.Types.ObjectId;
+  userEmail?: string;
+  action: string;
+  resource: string;
+  resourceId?: string;
+  method: string;
+  path: string;
+  statusCode: number;
+  ipAddress?: string;
+  userAgent?: string;
+  requestBody?: Record<string, any>;
+  responseTime: number;
+  error?: string;
+  metadata?: Record<string, any>;
+  createdAt: Date;
 }
 
 const AuditLogSchema: Schema = new Schema({
-    userId: {
-        type: Schema.Types.ObjectId,
-        ref: 'User',
-        index: true
-    },
-    userEmail: {
-        type: String,
-        index: true
-    },
-    action: {
-        type: String,
-        required: true,
-        enum: ['CREATE', 'READ', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'IMPORT', 'OTHER'],
-        index: true
-    },
-    resource: {
-        type: String,
-        required: true,
-        index: true
-    },
-    resourceId: {
-        type: String
-    },
-    method: {
-        type: String,
-        required: true,
-        enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-    },
-    path: {
-        type: String,
-        required: true
-    },
-    statusCode: {
-        type: Number,
-        required: true
-    },
-    ipAddress: {
-        type: String
-    },
-    userAgent: {
-        type: String
-    },
-    requestBody: {
-        type: Schema.Types.Mixed
-    },
-    responseTime: {
-        type: Number,
-        required: true
-    },
-    error: {
-        type: String
-    },
-    metadata: {
-        type: Schema.Types.Mixed
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now,
-        index: true
-    }
+  userId: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    index: true,
+  },
+  userEmail: {
+    type: String,
+    index: true,
+  },
+  action: {
+    type: String,
+    required: true,
+    enum: ['CREATE', 'READ', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'EXPORT', 'IMPORT', 'OTHER'],
+    index: true,
+  },
+  resource: {
+    type: String,
+    required: true,
+    index: true,
+  },
+  resourceId: {
+    type: String,
+  },
+  method: {
+    type: String,
+    required: true,
+    enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+  },
+  path: {
+    type: String,
+    required: true,
+  },
+  statusCode: {
+    type: Number,
+    required: true,
+  },
+  ipAddress: {
+    type: String,
+  },
+  userAgent: {
+    type: String,
+  },
+  requestBody: {
+    type: Schema.Types.Mixed,
+  },
+  responseTime: {
+    type: Number,
+    required: true,
+  },
+  error: {
+    type: String,
+  },
+  metadata: {
+    type: Schema.Types.Mixed,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+    index: true,
+  },
 });
 
 // Compound indexes for common queries

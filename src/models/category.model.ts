@@ -1,36 +1,39 @@
 import mongoose, { Schema } from 'mongoose';
-import { ICategory } from '../interfaces/category.interface';
+import type { ICategory } from '../interfaces/category.interface';
 
-const CategorySchema: Schema = new Schema({
-    name: { 
-        type: String, 
-        required: true,
-        unique: true 
+const CategorySchema: Schema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      unique: true,
     },
-    description: { 
-        type: String,
-        required: true
+    description: {
+      type: String,
+      required: true,
     },
     image: {
-        type: String,
-        default: 'category.png'
+      type: String,
+      default: 'category.png',
     },
     isActive: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     isFavorite: {
-        type: Boolean,
-        default: false
-    }
-}, { 
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 // Create indexes (optimizes queries)
 CategorySchema.index({ name: 1 });

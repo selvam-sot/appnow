@@ -8,7 +8,7 @@ const customFormat = winston.format.combine(
     // Winston adds timestamp during format.timestamp() but TypeScript doesn't know this
     const timestamp = info.timestamp || new Date().toISOString();
     return `${timestamp} [${info.level}]: ${info.message}`;
-  })
+  }),
 );
 
 // Create the logger instance
@@ -18,12 +18,9 @@ const logger = winston.createLogger({
   transports: [
     // Console transport for all environments
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        customFormat
-      ),
+      format: winston.format.combine(winston.format.colorize(), customFormat),
     }),
-    
+
     // File transports for production environment
     ...(process.env.NODE_ENV === 'production'
       ? [

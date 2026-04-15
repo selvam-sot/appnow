@@ -1,11 +1,11 @@
-import mongoose from 'mongoose';
+import type mongoose from 'mongoose';
 
 export interface IService {
-    _id: string;
-    name: string;
-    description?: string;
-    image: string;
-    categoryId: mongoose.Schema.Types.ObjectId;
-    subCategoryId: mongoose.Schema.Types.ObjectId;
-    isActive: boolean;
+  _id: string;
+  name: string;
+  description?: string;
+  image: string;
+  categoryId: mongoose.Schema.Types.ObjectId;
+  subCategoryId: mongoose.Schema.Types.ObjectId;
+  isActive: boolean;
 }

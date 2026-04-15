@@ -1,9 +1,9 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
-    getAllLocks,
-    forceReleaseLock,
-    cleanupExpiredLocks
+  getAllLocks,
+  forceReleaseLock,
+  cleanupExpiredLocks,
 } from '../../controllers/slot-lock.controller';
 import { sensitiveLimiter } from '../../middlewares/rateLimiter.middleware';
 

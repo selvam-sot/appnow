@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
+import type { Request, Response, NextFunction } from 'express';
+import { verifyToken } from '@clerk/backend';
 
 import userRoutes from './user.routes';
 import categoryRoutes from './category.routes';
@@ -27,14 +29,45 @@ import searchLogRoutes from './search-log.routes';
 import scheduledNotificationRoutes from './scheduled-notification.routes';
 import { syncAdmin, getAdminProfile } from '../../controllers/admin-portal.controller';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
+import { AppError } from '../../utils/appError.util';
 
 const router = Router();
 
-// Public routes - Admin sync (no authentication required for initial sync)
-router.post('/sync', [
+/**
+ * Middleware to verify the Clerk token on sync requests.
+ * Ensures the Bearer token's subject matches the clerkId in the request body.
+ */
+const verifySyncToken = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer')) {
+      return next(new AppError('Authorization token is required for sync.', 401));
+    }
+
+    const token = authHeader.split(' ')[1];
+    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY! });
+    const sub = payload.sub;
+
+    if (!sub || sub !== req.body.clerkId) {
+      return next(new AppError('Token does not match the provided Clerk ID.', 403));
+    }
+
+    next();
+  } catch {
+    return next(new AppError('Invalid or expired token.', 401));
+  }
+};
+
+// Admin sync - requires valid Clerk token matching the clerkId in body
+router.post(
+  '/sync',
+  [
     body('clerkId').notEmpty().withMessage('Clerk ID is required'),
-    body('email').isEmail().withMessage('Valid email is required')
-], syncAdmin);
+    body('email').isEmail().withMessage('Valid email is required'),
+  ],
+  verifySyncToken,
+  syncAdmin,
+);
 
 // Protected route - Get admin profile
 router.get('/profile', protectAdmin, getAdminProfile);

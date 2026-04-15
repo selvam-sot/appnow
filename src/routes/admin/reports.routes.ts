@@ -1,9 +1,9 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
-    generateRevenueReport,
-    generateUserReport,
-    generateAppointmentReport
+  generateRevenueReport,
+  generateUserReport,
+  generateAppointmentReport,
 } from '../../controllers/reports.controller';
 
 const router = express.Router();

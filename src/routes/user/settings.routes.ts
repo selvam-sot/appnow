@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import {
-    getUserSettings,
-    updateUserSettings,
-    deleteUserSettings,
-    updateSingleSetting
+  getUserSettings,
+  updateUserSettings,
+  deleteUserSettings,
+  updateSingleSetting,
 } from '../../controllers/user-settings.controller';
 
 const router = Router();

@@ -1,12 +1,12 @@
 import express from 'express';
 import {
-    createReview,
-    getVendorServiceReviews,
-    getVendorReviews,
-    getUserReviews,
-    updateReview,
-    deleteReview,
-    canReviewAppointment
+  createReview,
+  getVendorServiceReviews,
+  getVendorReviews,
+  getUserReviews,
+  updateReview,
+  deleteReview,
+  canReviewAppointment,
 } from '../controllers/review.controller';
 
 const router = express.Router();

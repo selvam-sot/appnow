@@ -1,10 +1,10 @@
 import express from 'express';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import {
-    getAuditLogs,
-    getAuditLogById,
-    getAuditLogStats,
-    getUserActivity
+  getAuditLogs,
+  getAuditLogById,
+  getAuditLogStats,
+  getUserActivity,
 } from '../../controllers/audit-log.controller';
 
 const router = express.Router();

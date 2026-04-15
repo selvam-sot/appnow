@@ -1,41 +1,45 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { IService } from '../interfaces/service.interface';
+import type { Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { IService } from '../interfaces/service.interface';
 
-const ServiceSchema: Schema = new Schema({
-    name: { 
-        type: String, 
-        required: true,
-        unique: true 
+const ServiceSchema: Schema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      unique: true,
     },
-    description: { 
-        type: String,
-        required: false
+    description: {
+      type: String,
+      required: false,
     },
     image: {
-        type: String,
-        default: 'service.png'
+      type: String,
+      default: 'service.png',
     },
     categoryId: {
-        type: Schema.Types.ObjectId,
-        ref: 'Category',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'Category',
+      required: true,
     },
     subCategoryId: {
-        type: Schema.Types.ObjectId,
-        ref: 'SubCategory',
-        required: true
+      type: Schema.Types.ObjectId,
+      ref: 'SubCategory',
+      required: true,
     },
     isActive: {
-        type: Boolean,
-        default: true
-    }
-}, { 
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
     // Match the exact field names and structure from the database
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v' // This matches the field in your DB output
-});
+    versionKey: '__v', // This matches the field in your DB output
+  },
+);
 
 export default mongoose.model<IService & Document>('Service', ServiceSchema);

@@ -5,7 +5,7 @@ import logger from '../config/logger';
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  process.env.GOOGLE_REDIRECT_URI
+  process.env.GOOGLE_REDIRECT_URI,
 );
 
 // Function to add an event to Google Calendar
@@ -15,15 +15,15 @@ export const addEventToCalendar = async (
   description: string,
   startDateTime: string,
   endDateTime: string,
-  attendeeEmails: string[] = []
+  attendeeEmails: string[] = [],
 ): Promise<any> => {
   try {
     // Set the access token
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     // Initialize the Calendar API
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
+
     // Create the event object
     const event = {
       summary,
@@ -36,7 +36,7 @@ export const addEventToCalendar = async (
         dateTime: endDateTime,
         timeZone: 'UTC',
       },
-      attendees: attendeeEmails.map(email => ({ email })),
+      attendees: attendeeEmails.map((email) => ({ email })),
       reminders: {
         useDefault: false,
         overrides: [
@@ -45,13 +45,13 @@ export const addEventToCalendar = async (
         ],
       },
     };
-    
+
     // Insert the event into the user's calendar
     const response = await calendar.events.insert({
       calendarId: 'primary',
       requestBody: event,
     });
-    
+
     logger.info(`Event created: ${response.data.htmlLink}`);
     return response.data;
   } catch (error) {
@@ -65,15 +65,15 @@ export const getCalendarEvents = async (
   accessToken: string,
   timeMin: string,
   timeMax: string,
-  maxResults = 10
+  maxResults = 10,
 ): Promise<any> => {
   try {
     // Set the access token
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     // Initialize the Calendar API
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
+
     // List events
     const response = await calendar.events.list({
       calendarId: 'primary',
@@ -83,7 +83,7 @@ export const getCalendarEvents = async (
       singleEvents: true,
       orderBy: 'startTime',
     });
-    
+
     return response.data.items;
   } catch (error) {
     logger.error('Error fetching calendar events:', error);
@@ -98,24 +98,24 @@ export const updateCalendarEvent = async (
   summary?: string,
   description?: string,
   startDateTime?: string,
-  endDateTime?: string
+  endDateTime?: string,
 ): Promise<any> => {
   try {
     // Set the access token
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     // Initialize the Calendar API
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
+
     // First, get the existing event
     const event = await calendar.events.get({
       calendarId: 'primary',
       eventId,
     });
-    
+
     // Create update object with only the fields that are provided
     const updateObject: any = {};
-    
+
     if (summary) updateObject.summary = summary;
     if (description) updateObject.description = description;
     if (startDateTime) {
@@ -130,7 +130,7 @@ export const updateCalendarEvent = async (
         timeZone: 'UTC',
       };
     }
-    
+
     // Update the event
     const response = await calendar.events.update({
       calendarId: 'primary',
@@ -140,7 +140,7 @@ export const updateCalendarEvent = async (
         ...updateObject,
       },
     });
-    
+
     logger.info(`Event updated: ${response.data.htmlLink}`);
     return response.data;
   } catch (error) {
@@ -150,23 +150,20 @@ export const updateCalendarEvent = async (
 };
 
 // Function to delete a calendar event
-export const deleteCalendarEvent = async (
-  accessToken: string,
-  eventId: string
-): Promise<void> => {
+export const deleteCalendarEvent = async (accessToken: string, eventId: string): Promise<void> => {
   try {
     // Set the access token
     oauth2Client.setCredentials({ access_token: accessToken });
-    
+
     // Initialize the Calendar API
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
+
     // Delete the event
     await calendar.events.delete({
       calendarId: 'primary',
       eventId,
     });
-    
+
     logger.info(`Event deleted: ${eventId}`);
   } catch (error) {
     logger.error('Error deleting calendar event:', error);

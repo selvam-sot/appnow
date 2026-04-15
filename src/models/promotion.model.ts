@@ -1,111 +1,122 @@
 import mongoose, { Schema } from 'mongoose';
-import { IPromotion } from '../interfaces/promotion.interface';
+import type { IPromotion } from '../interfaces/promotion.interface';
 
-const PromotionSchema: Schema = new Schema({
+const PromotionSchema: Schema = new Schema(
+  {
     title: {
-        type: String,
-        required: true,
-        trim: true
+      type: String,
+      required: true,
+      trim: true,
     },
     subtitle: {
-        type: String,
-        required: true,
-        trim: true
+      type: String,
+      required: true,
+      trim: true,
     },
     description: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     code: {
-        type: String,
-        required: true,
-        unique: true,
-        uppercase: true,
-        trim: true
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
     },
     discount: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
     },
     discountType: {
-        type: String,
-        enum: ['percentage', 'fixed'],
-        default: 'percentage'
+      type: String,
+      enum: ['percentage', 'fixed'],
+      default: 'percentage',
     },
     discountValue: {
-        type: Number,
-        required: true,
-        min: 0
+      type: Number,
+      required: true,
+      min: 0,
     },
     minBookingValue: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     maxDiscountAmount: {
-        type: Number,
-        default: null
+      type: Number,
+      default: null,
     },
     validFrom: {
-        type: Date,
-        required: true
+      type: Date,
+      required: true,
     },
     validUntil: {
-        type: Date,
-        required: true
+      type: Date,
+      required: true,
     },
-    terms: [{
-        type: String
-    }],
-    gradient: [{
-        type: String
-    }],
-    icon: {
+    terms: [
+      {
         type: String,
-        default: 'gift-outline'
+      },
+    ],
+    gradient: [
+      {
+        type: String,
+      },
+    ],
+    icon: {
+      type: String,
+      default: 'gift-outline',
     },
     isActive: {
-        type: Boolean,
-        default: true
+      type: Boolean,
+      default: true,
     },
     isNew: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     isFeatured: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     showInBanner: {
-        type: Boolean,
-        default: false
+      type: Boolean,
+      default: false,
     },
     displayOrder: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
     usageLimit: {
-        type: Number,
-        default: null
+      type: Number,
+      default: null,
     },
     usageCount: {
-        type: Number,
-        default: 0
+      type: Number,
+      default: 0,
     },
-    applicableServices: [{
+    applicableServices: [
+      {
         type: Schema.Types.ObjectId,
-        ref: 'VendorService'
-    }],
-    applicableCategories: [{
+        ref: 'VendorService',
+      },
+    ],
+    applicableCategories: [
+      {
         type: Schema.Types.ObjectId,
-        ref: 'Category'
-    }]
-}, {
+        ref: 'Category',
+      },
+    ],
+  },
+  {
     timestamps: {
-        createdAt: 'createdAt',
-        updatedAt: 'updatedAt'
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt',
     },
-    versionKey: '__v'
-});
+    versionKey: '__v',
+  },
+);
 
 // Create indexes
 PromotionSchema.index({ code: 1 });
