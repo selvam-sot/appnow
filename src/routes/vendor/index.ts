@@ -37,6 +37,14 @@ import {
   getSubCategories,
   getAnalytics,
 } from '../../controllers/vendor-portal.controller';
+import {
+  getVendorCoupons,
+  getVendorCouponById,
+  createVendorCoupon,
+  updateVendorCoupon,
+  toggleVendorCouponActive,
+  deleteVendorCoupon,
+} from '../../controllers/vendor-coupon.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
 import { AppError } from '../../utils/appError.util';
 
@@ -176,5 +184,25 @@ router.post(
 );
 router.post('/reviews/:id/approve', approveReview);
 router.post('/reviews/:id/reject', rejectReview);
+
+// Coupons (vendor-managed)
+router.get('/coupons', getVendorCoupons);
+router.get('/coupons/:id', getVendorCouponById);
+router.post(
+  '/coupons',
+  [
+    body('code').notEmpty().withMessage('Code is required'),
+    body('title').notEmpty().withMessage('Title is required'),
+    body('discountType')
+      .isIn(['percentage', 'fixed'])
+      .withMessage('Discount type must be percentage or fixed'),
+    body('discountValue').isNumeric().withMessage('Discount value must be a number'),
+    body('validUntil').notEmpty().withMessage('Valid until date is required'),
+  ],
+  createVendorCoupon,
+);
+router.put('/coupons/:id', updateVendorCoupon);
+router.patch('/coupons/:id/toggle-active', toggleVendorCouponActive);
+router.delete('/coupons/:id', deleteVendorCoupon);
 
 export default router;

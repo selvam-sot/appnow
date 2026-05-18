@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import Promotion from '../models/promotion.model';
+import VendorService from '../models/vendor-service.model';
+import mongoose from 'mongoose';
 
 /**
  * Get all promotions (Admin)
@@ -388,79 +390,114 @@ export const getActivePromotions = async (req: Request, res: Response): Promise<
 };
 
 /**
+ * Calculate discount amount based on promotion rules
+ */
+const calculateDiscount = (promotion: any, bookingAmount: number): number => {
+  let discountAmount = 0;
+  if (promotion.discountType === 'percentage') {
+    discountAmount = bookingAmount * (promotion.discountValue / 100);
+    if (promotion.maxDiscountAmount && discountAmount > promotion.maxDiscountAmount) {
+      discountAmount = promotion.maxDiscountAmount;
+    }
+  } else {
+    discountAmount = Math.min(promotion.discountValue, bookingAmount);
+  }
+  return Math.round(discountAmount * 100) / 100;
+};
+
+/**
+ * Server-side validation helper used by both validatePromoCode (HTTP) and createAppointment
+ * Returns { valid: true, promotion, discountAmount } or { valid: false, error }
+ */
+export const validatePromotionInternal = async (
+  code: string,
+  bookingAmount: number,
+  vendorServiceId?: string,
+): Promise<
+  | { valid: true; promotion: any; discountAmount: number }
+  | { valid: false; error: string }
+> => {
+  if (!code) return { valid: false, error: 'Promo code is required' };
+
+  const promotion = await Promotion.findOne({ code: code.toUpperCase(), isActive: true });
+  if (!promotion) return { valid: false, error: 'Invalid or expired promo code' };
+
+  const now = new Date();
+  if (promotion.validFrom && new Date(promotion.validFrom) > now) {
+    return { valid: false, error: 'This promo code is not yet active' };
+  }
+  if (promotion.validUntil && new Date(promotion.validUntil) < now) {
+    return { valid: false, error: 'This promo code has expired' };
+  }
+  if (promotion.usageLimit && promotion.usageCount >= promotion.usageLimit) {
+    return { valid: false, error: 'This promo code has reached its usage limit' };
+  }
+  if (promotion.minBookingValue && bookingAmount < promotion.minBookingValue) {
+    return {
+      valid: false,
+      error: `Minimum booking value of $${promotion.minBookingValue} required`,
+    };
+  }
+
+  // Scope checks
+  if (vendorServiceId) {
+    const vendorService = await VendorService.findById(vendorServiceId).select(
+      'vendorId categoryId',
+    );
+    if (vendorService) {
+      // Vendor-scoped coupon must match this service's vendor
+      if (
+        promotion.scope === 'vendor' &&
+        promotion.vendorId &&
+        promotion.vendorId.toString() !== vendorService.vendorId?.toString()
+      ) {
+        return { valid: false, error: 'This coupon is not valid for this vendor' };
+      }
+      // Service-restricted coupon
+      if (
+        Array.isArray(promotion.applicableServices) &&
+        promotion.applicableServices.length > 0 &&
+        !promotion.applicableServices.some(
+          (id: any) => id.toString() === vendorServiceId.toString(),
+        )
+      ) {
+        return { valid: false, error: 'This coupon is not applicable to this service' };
+      }
+      // Category-restricted coupon
+      if (
+        Array.isArray(promotion.applicableCategories) &&
+        promotion.applicableCategories.length > 0 &&
+        vendorService.categoryId &&
+        !promotion.applicableCategories.some(
+          (id: any) => id.toString() === vendorService.categoryId?.toString(),
+        )
+      ) {
+        return { valid: false, error: 'This coupon is not applicable to this category' };
+      }
+    }
+  }
+
+  const discountAmount = calculateDiscount(promotion, bookingAmount);
+  return { valid: true, promotion, discountAmount };
+};
+
+/**
  * Validate a promo code
  * @route POST /api/promotions/validate
  */
 export const validatePromoCode = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { code, bookingAmount } = req.body;
+    const { code, bookingAmount, vendorServiceId } = req.body;
 
-    if (!code) {
-      res.status(400).json({
-        success: false,
-        error: 'Promo code is required',
-      });
+    const result = await validatePromotionInternal(
+      code,
+      Number(bookingAmount) || 0,
+      vendorServiceId,
+    );
+
+    if (!result.valid) {
+      res.status(400).json({ success: false, error: result.error });
       return;
-    }
-
-    const promotion = await Promotion.findOne({
-      code: code.toUpperCase(),
-      isActive: true,
-    });
-
-    if (!promotion) {
-      res.status(404).json({
-        success: false,
-        error: 'Invalid or expired promo code',
-      });
-      return;
-    }
-
-    // Check date validity
-    const now = new Date();
-    if (promotion.validFrom && new Date(promotion.validFrom) > now) {
-      res.status(400).json({
-        success: false,
-        error: 'This promo code is not yet active',
-      });
-      return;
-    }
-    if (promotion.validUntil && new Date(promotion.validUntil) < now) {
-      res.status(400).json({
-        success: false,
-        error: 'This promo code has expired',
-      });
-      return;
-    }
-
-    // Check usage limit
-    if (promotion.usageLimit && promotion.usageCount >= promotion.usageLimit) {
-      res.status(400).json({
-        success: false,
-        error: 'This promo code has reached its usage limit',
-      });
-      return;
-    }
-
-    // Check minimum booking value
-    if (promotion.minBookingValue && bookingAmount && bookingAmount < promotion.minBookingValue) {
-      res.status(400).json({
-        success: false,
-        error: `Minimum booking value of $${promotion.minBookingValue} required for this promo code`,
-      });
-      return;
-    }
-
-    // Calculate discount
-    let discountAmount = 0;
-    if (promotion.discountType === 'percentage') {
-      discountAmount = (bookingAmount || 0) * (promotion.discountValue / 100);
-      // Apply max discount cap if set
-      if (promotion.maxDiscountAmount && discountAmount > promotion.maxDiscountAmount) {
-        discountAmount = promotion.maxDiscountAmount;
-      }
-    } else {
-      discountAmount = promotion.discountValue;
     }
 
     res.status(200).json({
@@ -468,15 +505,194 @@ export const validatePromoCode = async (req: Request, res: Response): Promise<vo
       data: {
         isValid: true,
         promotion: {
-          _id: promotion._id,
-          title: promotion.title,
-          code: promotion.code,
-          discount: promotion.discount,
-          discountType: promotion.discountType,
-          discountValue: promotion.discountValue,
+          _id: result.promotion._id,
+          title: result.promotion.title,
+          code: result.promotion.code,
+          discount: result.promotion.discount,
+          discountType: result.promotion.discountType,
+          discountValue: result.promotion.discountValue,
         },
-        discountAmount: Math.round(discountAmount * 100) / 100,
+        discountAmount: result.discountAmount,
       },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
+    });
+  }
+};
+
+/**
+ * Get applicable coupons for a specific vendor service
+ * @route GET /api/promotions/applicable/:vendorServiceId
+ * Returns all active coupons that can be applied to the given service
+ */
+export const getApplicableCoupons = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { vendorServiceId } = req.params;
+    const { amount } = req.query;
+    const bookingAmount = Number(amount) || 0;
+
+    const vendorService = await VendorService.findById(vendorServiceId)
+      .select('vendorId categoryId subCategoryId')
+      .lean();
+
+    if (!vendorService) {
+      res.status(404).json({ success: false, error: 'Service not found' });
+      return;
+    }
+
+    const now = new Date();
+    const orFilters: any[] = [
+      // Platform-wide coupons (no restrictions)
+      {
+        scope: 'platform',
+        $and: [
+          {
+            $or: [
+              { applicableServices: { $size: 0 } },
+              { applicableServices: { $exists: false } },
+              { applicableServices: new mongoose.Types.ObjectId(vendorServiceId) },
+            ],
+          },
+          {
+            $or: [
+              { applicableCategories: { $size: 0 } },
+              { applicableCategories: { $exists: false } },
+              ...(vendorService.categoryId
+                ? [{ applicableCategories: vendorService.categoryId }]
+                : []),
+            ],
+          },
+        ],
+      },
+      // Vendor-specific coupons for this vendor
+      ...(vendorService.vendorId
+        ? [{ scope: 'vendor', vendorId: vendorService.vendorId }]
+        : []),
+    ];
+
+    const promotions = await Promotion.find({
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now },
+      $or: orFilters,
+    })
+      .sort({ displayOrder: 1, discountValue: -1 })
+      .lean();
+
+    // Filter out coupons that exceeded usage limit or where booking amount is too low
+    const applicable = promotions
+      .filter((p: any) => {
+        if (p.usageLimit && p.usageCount >= p.usageLimit) return false;
+        if (p.minBookingValue && bookingAmount > 0 && bookingAmount < p.minBookingValue)
+          return false;
+        return true;
+      })
+      .map((p: any) => ({
+        _id: p._id,
+        code: p.code,
+        title: p.title,
+        subtitle: p.subtitle,
+        description: p.description,
+        discount: p.discount,
+        discountType: p.discountType,
+        discountValue: p.discountValue,
+        minBookingValue: p.minBookingValue || 0,
+        maxDiscountAmount: p.maxDiscountAmount,
+        validUntil: p.validUntil,
+        terms: p.terms,
+        gradient: p.gradient,
+        icon: p.icon,
+        scope: p.scope,
+        estimatedDiscount: bookingAmount > 0 ? calculateDiscount(p, bookingAmount) : null,
+      }));
+
+    res.status(200).json({
+      success: true,
+      count: applicable.length,
+      data: applicable,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Server Error',
+      message: error instanceof Error ? error.message : 'Unknown error occurred',
+    });
+  }
+};
+
+/**
+ * Get the best discount available for a service (used for badges on cards)
+ * @route GET /api/promotions/best-discount/:vendorServiceId
+ */
+export const getBestDiscountForService = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  try {
+    const { vendorServiceId } = req.params;
+
+    const vendorService = await VendorService.findById(vendorServiceId)
+      .select('vendorId categoryId price')
+      .lean();
+
+    if (!vendorService) {
+      res.status(404).json({ success: false, error: 'Service not found' });
+      return;
+    }
+
+    const now = new Date();
+    const promotions = await Promotion.find({
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now },
+      $or: [
+        { scope: 'platform' },
+        ...(vendorService.vendorId
+          ? [{ scope: 'vendor', vendorId: vendorService.vendorId }]
+          : []),
+      ],
+    }).lean();
+
+    const price = vendorService.price || 0;
+    let best: { code: string; label: string; discountAmount: number } | null = null;
+
+    for (const p of promotions as any[]) {
+      // Skip service/category-restricted coupons that don't match
+      if (
+        Array.isArray(p.applicableServices) &&
+        p.applicableServices.length > 0 &&
+        !p.applicableServices.some((id: any) => id.toString() === vendorServiceId)
+      )
+        continue;
+      if (
+        Array.isArray(p.applicableCategories) &&
+        p.applicableCategories.length > 0 &&
+        vendorService.categoryId &&
+        !p.applicableCategories.some(
+          (id: any) => id.toString() === vendorService.categoryId?.toString(),
+        )
+      )
+        continue;
+      if (p.minBookingValue && price < p.minBookingValue) continue;
+      if (p.usageLimit && p.usageCount >= p.usageLimit) continue;
+
+      const discountAmount = calculateDiscount(p, price);
+      if (!best || discountAmount > best.discountAmount) {
+        best = {
+          code: p.code,
+          label: p.discount,
+          discountAmount,
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: best,
     });
   } catch (error) {
     res.status(500).json({

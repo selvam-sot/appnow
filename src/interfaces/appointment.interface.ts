@@ -26,6 +26,8 @@ export interface IAppointment {
   customerNotes: string;
   serviceFee: number;
   discountAmount: number;
+  promotionId?: string | null;
+  couponCode?: string | null;
   walletAmount: number;
   total: number;
   paymentMode: string;

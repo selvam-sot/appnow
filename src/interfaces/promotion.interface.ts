@@ -24,6 +24,9 @@ export interface IPromotion extends Document {
   usageCount: number;
   applicableServices?: string[];
   applicableCategories?: string[];
+  scope: 'platform' | 'vendor';
+  vendorId?: string | null;
+  createdBy: 'admin' | 'vendor';
   createdAt: Date;
   updatedAt: Date;
 }

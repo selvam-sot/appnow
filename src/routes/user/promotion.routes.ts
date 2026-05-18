@@ -17,4 +17,10 @@ router.post('/validate', promotionController.validatePromoCode);
 // Apply a promo code (increment usage)
 router.post('/apply', promotionController.applyPromoCode);
 
+// Get all applicable coupons for a specific vendor service
+router.get('/applicable/:vendorServiceId', promotionController.getApplicableCoupons);
+
+// Get the best discount available for a service (for badges on service cards)
+router.get('/best-discount/:vendorServiceId', promotionController.getBestDiscountForService);
+
 export default router;

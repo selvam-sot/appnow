@@ -100,6 +100,41 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
   if (req.body.type == 'create-booking') {
     delete req.body.type;
 
+    // === Coupon validation ===
+    // If a coupon code is provided, re-validate it server-side and overwrite
+    // discountAmount/total with server-calculated values. Never trust the client.
+    if (req.body.couponCode) {
+      const { validatePromotionInternal } = await import('./promotion.controller');
+      const baseAmount = Number(req.body.serviceFee) || 0;
+      const result = await validatePromotionInternal(
+        req.body.couponCode,
+        baseAmount,
+        req.body.vendorServiceId,
+      );
+
+      if (!result.valid) {
+        return res.status(400).json({
+          success: false,
+          message: result.error,
+        });
+      }
+
+      // Override discount with server-calculated amount
+      req.body.promotionId = result.promotion._id;
+      req.body.couponCode = result.promotion.code;
+      req.body.discountAmount = result.discountAmount;
+      // Recalculate total: serviceFee - discount - walletAmount (if any)
+      const walletAmount = Number(req.body.walletAmount) || 0;
+      req.body.total = Math.max(0, baseAmount - result.discountAmount - walletAmount);
+    } else {
+      // No coupon — clear any client-supplied discount data
+      req.body.promotionId = null;
+      req.body.couponCode = null;
+      req.body.discountAmount = 0;
+    }
+    // === End coupon validation ===
+
+
     // Check if slot is locked by another user
     if (
       req.body.vendorServiceId &&
@@ -188,6 +223,19 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
     }
 
     const appointment = await Appointment.create(req.body);
+
+    // Increment coupon usage count after successful appointment creation
+    if (appointment.promotionId) {
+      try {
+        const Promotion = (await import('../models/promotion.model')).default;
+        await Promotion.updateOne(
+          { _id: appointment.promotionId },
+          { $inc: { usageCount: 1 } },
+        );
+      } catch (couponErr: any) {
+        logger.error(`Failed to increment coupon usage: ${couponErr.message}`);
+      }
+    }
 
     // Release the slot lock after successful appointment creation
     try {

@@ -77,6 +77,19 @@ const AppointmentSchema: Schema = new Schema(
     },
     discountAmount: {
       type: Number,
+      default: 0,
+    },
+    // Coupon/promotion tracking
+    promotionId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Promotion',
+      default: null,
+    },
+    couponCode: {
+      type: String,
+      default: null,
+      uppercase: true,
+      trim: true,
     },
     walletAmount: {
       type: Number,

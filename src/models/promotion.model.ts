@@ -108,6 +108,25 @@ const PromotionSchema: Schema = new Schema(
         ref: 'Category',
       },
     ],
+    // Scope: 'platform' = available on all services (admin created)
+    //        'vendor' = limited to a specific vendor's services (vendor or admin created)
+    scope: {
+      type: String,
+      enum: ['platform', 'vendor'],
+      default: 'platform',
+    },
+    // For vendor-scoped coupons, the vendor that created/owns the coupon
+    vendorId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Vendor',
+      default: null,
+    },
+    // Who created the coupon - useful for vendor app filtering
+    createdBy: {
+      type: String,
+      enum: ['admin', 'vendor'],
+      default: 'admin',
+    },
   },
   {
     timestamps: {
@@ -125,5 +144,7 @@ PromotionSchema.index({ showInBanner: 1 });
 PromotionSchema.index({ isFeatured: 1 });
 PromotionSchema.index({ displayOrder: 1 });
 PromotionSchema.index({ validFrom: 1, validUntil: 1 });
+PromotionSchema.index({ scope: 1, vendorId: 1, isActive: 1 });
+PromotionSchema.index({ applicableServices: 1, isActive: 1 });
 
 export default mongoose.model<IPromotion>('Promotion', PromotionSchema, 'promotions');
