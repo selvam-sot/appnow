@@ -546,10 +546,17 @@ export const getApplicableCoupons = async (req: Request, res: Response): Promise
 
     const now = new Date();
     const orFilters: any[] = [
-      // Platform-wide coupons (no restrictions)
+      // Platform-wide coupons (no scope set = legacy = treated as platform)
       {
-        scope: 'platform',
         $and: [
+          // scope is 'platform' OR not set (legacy promotions before scope was added)
+          {
+            $or: [
+              { scope: 'platform' },
+              { scope: { $exists: false } },
+              { scope: null },
+            ],
+          },
           {
             $or: [
               { applicableServices: { $size: 0 } },
@@ -650,7 +657,10 @@ export const getBestDiscountForService = async (
       validFrom: { $lte: now },
       validUntil: { $gte: now },
       $or: [
+        // Platform-wide coupons (scope='platform' OR legacy promotions without scope)
         { scope: 'platform' },
+        { scope: { $exists: false } },
+        { scope: null },
         ...(vendorService.vendorId
           ? [{ scope: 'vendor', vendorId: vendorService.vendorId }]
           : []),
