@@ -62,17 +62,28 @@ const verifySyncToken = async (req: Request, res: Response, next: NextFunction) 
       return next(new AppError('Authorization token is required for sync.', 401));
     }
 
-    const token = authHeader.split(' ')[1];
-    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY! });
-    const sub = payload.sub;
+    if (!process.env.CLERK_SECRET_KEY) {
+      console.error('[verifySyncToken vendor] CLERK_SECRET_KEY env var is not set');
+      return next(new AppError('Server misconfiguration. Contact administrator.', 500));
+    }
 
-    if (!sub || sub !== req.body.clerkId) {
+    const token = authHeader.split(' ')[1];
+    let payload: { sub?: string };
+    try {
+      payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+    } catch (verifyErr: any) {
+      console.error('[verifySyncToken vendor] Token verification failed:', verifyErr?.message);
+      return next(new AppError('Invalid or expired token.', 401));
+    }
+
+    if (!payload?.sub || payload.sub !== req.body.clerkId) {
       return next(new AppError('Token does not match the provided Clerk ID.', 403));
     }
 
     next();
-  } catch {
-    return next(new AppError('Invalid or expired token.', 401));
+  } catch (err: any) {
+    console.error('[verifySyncToken vendor] Unexpected error:', err?.message, err?.stack);
+    return next(new AppError('Authentication error. Please try again.', 401));
   }
 };
 

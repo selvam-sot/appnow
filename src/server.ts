@@ -50,13 +50,29 @@ startNotificationScheduler();
 autoCompleteAppointments();
 setInterval(autoCompleteAppointments, 15 * 60 * 1000);
 
-// Error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  logger.error(`Error: ${err.message}`);
-  res.status(500).json({
+// Error handler - respects AppError.statusCode and exposes useful messages
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const statusCode = err?.statusCode || err?.status || 500;
+  const isOperational = err?.isOperational === true;
+  const message = err?.message || 'Something went wrong';
+
+  // Always log the full error server-side
+  logger.error(`[${req.method} ${req.path}] ${statusCode} - ${message}`);
+  if (err?.stack && statusCode >= 500) {
+    logger.error(err.stack);
+  }
+
+  res.status(statusCode).json({
     success: false,
-    error: 'Server Error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
+    error: statusCode >= 500 ? 'Server Error' : message,
+    // For operational AppErrors (4xx), always expose the message.
+    // For 5xx, only expose in development.
+    message:
+      isOperational || statusCode < 500
+        ? message
+        : process.env.NODE_ENV === 'development'
+          ? message
+          : 'Something went wrong',
   });
 });
 
