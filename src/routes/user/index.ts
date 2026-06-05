@@ -21,6 +21,9 @@ import homeRoutes from './home.routes';
 import loyaltyRoutes from './loyalty.routes';
 import referralRoutes from './referral.routes';
 import waitlistRoutes from './waitlist.routes';
+import privacyRoutes from './privacy.routes';
+import addressBookRoutes from './address-book.routes';
+import geoSearchRoutes from './geo-search.routes';
 
 const router = Router();
 
@@ -45,5 +48,8 @@ router.use('/home', homeRoutes);
 router.use('/loyalty', loyaltyRoutes);
 router.use('/referrals', referralRoutes);
 router.use('/waitlist', waitlistRoutes);
+router.use('/privacy', privacyRoutes);
+router.use('/', addressBookRoutes); // /addresses, /notification-prefs
+router.use('/search', geoSearchRoutes); // /search/near-me
 
 export default router;

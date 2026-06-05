@@ -79,6 +79,17 @@ const AppointmentSchema: Schema = new Schema(
       type: Number,
       default: 0,
     },
+    // Tip from customer to vendor (US service industry standard).
+    // Added to vendor's net payout (does not get platform commission).
+    tipAmount: {
+      type: Number,
+      default: 0,
+    },
+    // Sales tax collected at booking time (Stripe Tax)
+    taxAmount: {
+      type: Number,
+      default: 0,
+    },
     // Coupon/promotion tracking
     promotionId: {
       type: Schema.Types.ObjectId,
@@ -110,6 +121,12 @@ const AppointmentSchema: Schema = new Schema(
     },
     paymentIntentId: {
       type: String,
+    },
+    // Idempotency key — client sends a unique key per booking attempt
+    // to prevent duplicate appointments on network retry.
+    idempotencyKey: {
+      type: String,
+      default: null,
     },
     paymentStatus: {
       type: String,
@@ -183,6 +200,8 @@ AppointmentSchema.index({ vendorServiceId: 1, appointmentDate: 1, startTime: 1, 
 AppointmentSchema.index({ paymentStatus: 1 });
 // Index for payment intent lookup (Stripe webhooks)
 AppointmentSchema.index({ paymentIntentId: 1 });
+// Sparse unique index — only enforces uniqueness when idempotencyKey is set.
+AppointmentSchema.index({ idempotencyKey: 1 }, { unique: true, sparse: true });
 // Index for created date (dashboard analytics)
 AppointmentSchema.index({ createdAt: -1 });
 // Index for reminder queries

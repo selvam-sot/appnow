@@ -116,6 +116,37 @@ function generateSlots(
 }
 
 /**
+ * Wrap an async operation with retry-on-transient-error logic.
+ * Cosmos DB throttles or closes connections under heavy write load;
+ * retries with exponential backoff handle this gracefully.
+ */
+async function withRetry<T>(op: () => Promise<T>, label: string, maxAttempts = 5): Promise<T> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await op();
+    } catch (err: any) {
+      lastErr = err;
+      const isTransient =
+        err?.name === 'MongoNetworkError' ||
+        err?.name === 'MongoServerSelectionError' ||
+        err?.code === 16500 || // Cosmos rate-limit
+        err?.code === 'ECONNRESET' ||
+        err?.message?.includes('connection') ||
+        err?.message?.includes('timed out') ||
+        err?.message?.includes('Request rate is large');
+
+      if (!isTransient || attempt === maxAttempts) throw err;
+
+      const backoffMs = Math.min(1000 * 2 ** (attempt - 1), 10000); // 1s, 2s, 4s, 8s, 10s
+      console.log(`    ↻ ${label} attempt ${attempt} failed (${err?.message}). Retrying in ${backoffMs}ms…`);
+      await delay(backoffMs);
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Create slot documents — mirrors the vendor-portal controller pattern:
  * 1. Create document with the FIRST date (never empty dates[])
  * 2. Push additional dates one at a time via findById + push + save
@@ -126,34 +157,40 @@ async function createSlotWithDates(group: SlotGroup): Promise<void> {
 
   // Step 1: Create with the first date (Cosmos DB needs data in nested arrays at creation)
   const firstDate = group.dates[0];
-  const slotDoc = await VendorServiceSlot.create({
-    vendorServiceId: group.vendorServiceId,
-    month: group.month,
-    year: group.year,
-    reoccurrence: group.reoccurrence,
-    dates: [
-      {
-        date: firstDate.date,
-        reoccurrence: firstDate.reoccurrence,
-        timingType: firstDate.timingType,
-        timings: firstDate.timings,
-      },
-    ],
-  });
+  const slotDoc = await withRetry(
+    () =>
+      VendorServiceSlot.create({
+        vendorServiceId: group.vendorServiceId,
+        month: group.month,
+        year: group.year,
+        reoccurrence: group.reoccurrence,
+        dates: [
+          {
+            date: firstDate.date,
+            reoccurrence: firstDate.reoccurrence,
+            timingType: firstDate.timingType,
+            timings: firstDate.timings,
+          },
+        ],
+      }),
+    `create slot doc ${group.month}/${group.year}`,
+  );
 
   // Step 2: Push remaining dates one at a time (like the vendor-portal controller)
   for (let i = 1; i < group.dates.length; i++) {
     const dateEntry = group.dates[i];
-    const doc = await VendorServiceSlot.findById(slotDoc._id);
-    if (!doc) break;
-    doc.dates.push({
-      date: dateEntry.date,
-      reoccurrence: dateEntry.reoccurrence,
-      timingType: dateEntry.timingType,
-      timings: dateEntry.timings,
-    } as any);
-    await doc.save();
-    await delay(100);
+    await withRetry(async () => {
+      const doc = await VendorServiceSlot.findById(slotDoc._id);
+      if (!doc) return;
+      doc.dates.push({
+        date: dateEntry.date,
+        reoccurrence: dateEntry.reoccurrence,
+        timingType: dateEntry.timingType,
+        timings: dateEntry.timings,
+      } as any);
+      await doc.save();
+    }, `push date ${dateEntry.date.toISOString().slice(0, 10)}`);
+    await delay(200); // longer baseline delay to avoid Cosmos throttling
   }
 }
 
@@ -2062,20 +2099,31 @@ async function main() {
     }
   }
 
-  // ── 6. Delete ALL existing slots for seeded vendor services (fresh recreation) ──
-  console.log('\n── Deleting all existing slots ──');
-  for (const { doc: vsDoc, vs } of vendorServiceDocs) {
-    const result = await VendorServiceSlot.deleteMany({ vendorServiceId: vsDoc._id });
-    if (result.deletedCount > 0) {
-      console.log(`  🗑 deleted ${result.deletedCount} slot(s) — ${vs.name}`);
+  // ── 6. Delete existing slots only for services that DON'T have full coverage ──
+  // (110 days = ~5 month-groups expected). Skip services that already look complete
+  // so re-running after a Cosmos throttle failure resumes from where it stopped.
+  console.log('\n── Checking existing slot coverage ──');
+  const servicesToSeed: typeof vendorServiceDocs = [];
+  for (const entry of vendorServiceDocs) {
+    const existingGroups = await VendorServiceSlot.countDocuments({
+      vendorServiceId: entry.doc._id,
+    });
+    if (existingGroups >= 5) {
+      console.log(`  ⏭ skip — ${entry.vs.name} (already has ${existingGroups} month-groups)`);
+      continue;
+    }
+    if (existingGroups > 0) {
+      const result = await VendorServiceSlot.deleteMany({ vendorServiceId: entry.doc._id });
+      console.log(`  🗑 deleted ${result.deletedCount} partial slot(s) — ${entry.vs.name}`);
       await delay(100);
     }
+    servicesToSeed.push(entry);
   }
 
-  // ── 7. Vendor Service Slots (fresh creation) ──
-  console.log('\n── Creating Vendor Service Slots ──');
+  // ── 7. Vendor Service Slots (fresh creation only for services needing it) ──
+  console.log(`\n── Creating Vendor Service Slots (${servicesToSeed.length} services) ──`);
   let slotCount = 0;
-  for (const { doc: vsDoc, vs } of vendorServiceDocs) {
+  for (const { doc: vsDoc, vs } of servicesToSeed) {
     // Determine timing scheme based on category
     const category = VENDORS.find((v) => v.vendorName === vs.vendorName)?.category || '';
     const isBarber = category === 'Barber';
@@ -2086,12 +2134,12 @@ async function main() {
     const saturday = hasSaturday ? (isBarber ? BARBER_SAT : SAT_DEFAULT) : undefined;
     const reoccurrence = isBarber ? 2 : 1;
 
-    const slotGroups = generateSlots(vsDoc._id, 60, reoccurrence, weekday, saturday);
+    const slotGroups = generateSlots(vsDoc._id, 110, reoccurrence, weekday, saturday);
 
     for (const group of slotGroups) {
       await createSlotWithDates(group);
       slotCount++;
-      await delay(200);
+      await delay(500); // breathing room between month-groups to avoid Cosmos throttling
     }
     console.log(
       `  + slots created — ${vs.name} (${slotGroups.length} month-groups, ${slotGroups.reduce((s, g) => s + g.dates.length, 0)} dates)`,

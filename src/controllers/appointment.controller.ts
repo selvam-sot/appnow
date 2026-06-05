@@ -100,6 +100,30 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
   if (req.body.type == 'create-booking') {
     delete req.body.type;
 
+    // === Idempotency check ===
+    // If the client retries (e.g. network glitch), we must not create a duplicate
+    // appointment + payment. Accept an `idempotencyKey` in the body OR the
+    // `Idempotency-Key` HTTP header (Stripe-style).
+    const idempotencyKey =
+      req.body.idempotencyKey ||
+      (req.headers['idempotency-key'] as string | undefined) ||
+      (req.headers['x-idempotency-key'] as string | undefined);
+
+    if (idempotencyKey) {
+      const existing = await Appointment.findOne({ idempotencyKey });
+      if (existing) {
+        // Return the previously created appointment as-is
+        return res.status(200).json({
+          success: true,
+          data: existing,
+          message: 'Appointment already exists for this idempotency key',
+          idempotent: true,
+        });
+      }
+      req.body.idempotencyKey = idempotencyKey;
+    }
+    // === End idempotency check ===
+
     // === Coupon validation ===
     // If a coupon code is provided, re-validate it server-side and overwrite
     // discountAmount/total with server-calculated values. Never trust the client.
@@ -196,6 +220,7 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
         const paymentIntent = await StripeService.createPaymentIntent({
           amount: req.body.total,
           currency: 'usd',
+          idempotencyKey: req.body.idempotencyKey,
           metadata: {
             appointmentType: 'booking',
             customerId: req.body.customerId,
@@ -223,6 +248,20 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
     }
 
     const appointment = await Appointment.create(req.body);
+
+    // Record a pending vendor payout for this appointment.
+    // Use queue if Redis is available, otherwise fall back to sync (best-effort).
+    try {
+      const { enqueuePayoutRecord } = await import('../services/webhook-queue.service');
+      const queued = await enqueuePayoutRecord(appointment._id.toString());
+      if (!queued) {
+        const { recordPayoutForAppointment } = await import('../services/vendor-payout.service');
+        await recordPayoutForAppointment(appointment._id.toString());
+      }
+    } catch (payoutErr: any) {
+      // Don't fail the booking if payout recording fails — it can be retried.
+      logger.error(`Failed to record vendor payout: ${payoutErr.message}`);
+    }
 
     // Increment coupon usage count after successful appointment creation
     if (appointment.promotionId) {

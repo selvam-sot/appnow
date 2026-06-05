@@ -33,6 +33,8 @@ export interface IAppointment {
   paymentMode: string;
   cardDetails: null | ICardDetails;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'missed' | 'failed';
+  // Idempotency
+  idempotencyKey?: string | null;
   // Payment fields
   paymentIntentId?: string;
   paymentStatus?: 'pending' | 'completed' | 'refunded' | 'partially_refunded' | 'failed';

@@ -1,9 +1,15 @@
 import 'dotenv/config';
+
+// Initialize Sentry FIRST — before any other imports so it can instrument them.
+import { initSentry, Sentry } from './config/sentry';
+initSentry();
+
 import type { Request, Response, NextFunction } from 'express';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import hpp from 'hpp';
+import mongoose from 'mongoose';
 import { connectToDatabase } from './config/database';
 import logger from './config/logger';
 import corsOptions from './config/cors';
@@ -16,6 +22,8 @@ import userRoutes from './routes/user';
 import vendorRoutes from './routes/vendor';
 import { startNotificationScheduler } from './services/notification-scheduler.service';
 import { autoCompleteAppointments } from './services/scheduler.service';
+import { startWebhookWorker } from './services/webhook-queue.service';
+import { shutdownQueues } from './config/queue';
 
 const app = express();
 connectToDatabase();
@@ -32,9 +40,41 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
   next();
 });
 
-// Health check
+// Liveness probe — process is up and accepting requests
 app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// Readiness probe — process is ready to serve requests (DB connected, etc.)
+// Use this for Azure/Kubernetes/load-balancer health checks.
+app.get('/ready', async (_req: Request, res: Response) => {
+  const checks: Record<string, { status: 'ok' | 'error'; message?: string }> = {};
+
+  // MongoDB / Cosmos connectivity
+  try {
+    const state = mongoose.connection.readyState;
+    // 1 = connected, 2 = connecting, 0 = disconnected, 3 = disconnecting
+    if (state !== 1) {
+      checks.database = { status: 'error', message: `readyState=${state}` };
+    } else {
+      // Ping to confirm the connection is actually alive
+      await mongoose.connection.db?.admin().ping();
+      checks.database = { status: 'ok' };
+    }
+  } catch (err: any) {
+    checks.database = { status: 'error', message: err?.message || 'ping failed' };
+  }
+
+  const allHealthy = Object.values(checks).every((c) => c.status === 'ok');
+  res.status(allHealthy ? 200 : 503).json({
+    status: allHealthy ? 'ready' : 'not-ready',
+    checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Swagger
@@ -50,6 +90,18 @@ startNotificationScheduler();
 autoCompleteAppointments();
 setInterval(autoCompleteAppointments, 15 * 60 * 1000);
 
+// Background queue worker (Redis-backed). No-op if REDIS_URL not set.
+startWebhookWorker();
+
+// Graceful shutdown — flush queues before process exits
+const shutdown = async (signal: string) => {
+  logger.info(`[Server] Received ${signal}, shutting down gracefully`);
+  await shutdownQueues();
+  process.exit(0);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
 // Error handler - respects AppError.statusCode and exposes useful messages
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   const statusCode = err?.statusCode || err?.status || 500;
@@ -60,6 +112,14 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   logger.error(`[${req.method} ${req.path}] ${statusCode} - ${message}`);
   if (err?.stack && statusCode >= 500) {
     logger.error(err.stack);
+  }
+
+  // Report unexpected (5xx) errors to Sentry. Operational 4xx errors are filtered out.
+  if (statusCode >= 500) {
+    Sentry.captureException(err, {
+      tags: { method: req.method, path: req.path, statusCode: String(statusCode) },
+      extra: { userId: (req as any).user?._id, vendorId: (req as any).vendorId },
+    });
   }
 
   res.status(statusCode).json({

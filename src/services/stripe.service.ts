@@ -8,6 +8,7 @@ export interface PaymentIntentData {
   currency: string;
   customerId?: string;
   metadata?: Record<string, string>;
+  idempotencyKey?: string;
 }
 
 export interface CustomerData {
@@ -19,15 +20,22 @@ export interface CustomerData {
 export class StripeService {
   static async createPaymentIntent(data: PaymentIntentData): Promise<Stripe.PaymentIntent> {
     try {
-      const paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(data.amount), // Convert to cents
-        currency: data.currency || 'usd',
-        customer: data.customerId,
-        metadata: data.metadata || {},
-        automatic_payment_methods: {
-          enabled: true,
+      const options: Stripe.RequestOptions = {};
+      if (data.idempotencyKey) {
+        options.idempotencyKey = `pi_${data.idempotencyKey}`;
+      }
+      const paymentIntent = await stripe.paymentIntents.create(
+        {
+          amount: Math.round(data.amount), // Convert to cents
+          currency: data.currency || 'usd',
+          customer: data.customerId,
+          metadata: data.metadata || {},
+          automatic_payment_methods: {
+            enabled: true,
+          },
         },
-      });
+        options,
+      );
 
       logger.info(`Payment intent created: ${paymentIntent.id}`);
       return paymentIntent;

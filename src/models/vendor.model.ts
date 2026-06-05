@@ -49,6 +49,18 @@ const VendorSchema: Schema = new Schema(
     location: {
       type: String,
     },
+    // GeoJSON Point for "near me" search. Format: { type: 'Point', coordinates: [lng, lat] }
+    geoLocation: {
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        default: undefined,
+      },
+    },
     email: {
       type: String,
     },
@@ -118,6 +130,39 @@ const VendorSchema: Schema = new Schema(
     taxId: {
       type: String,
     },
+    // ─── Stripe Connect (for vendor payouts) ───
+    // Stripe Connect account ID (acct_xxx) — issued when vendor starts onboarding
+    stripeConnectAccountId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    // Has the vendor finished Stripe's KYC + bank account setup?
+    stripeOnboardingCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    // Stripe Connect flags from /accounts retrieve
+    stripeChargesEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    stripePayoutsEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    // Country code for Stripe Connect (US for now)
+    stripeCountry: {
+      type: String,
+      default: 'US',
+    },
+    // Platform commission percentage (0-100) — e.g. 10 = platform takes 10%
+    commissionRate: {
+      type: Number,
+      default: 10,
+      min: 0,
+      max: 100,
+    },
     // Reference to User record (for vendor login)
     userId: {
       type: Schema.Types.ObjectId,
@@ -144,6 +189,8 @@ const VendorSchema: Schema = new Schema(
 // Indexes for performance optimization
 // Index for vendor name search
 VendorSchema.index({ vendorName: 1 });
+// 2dsphere index for geo-search ($near, $geoWithin)
+VendorSchema.index({ geoLocation: '2dsphere' });
 // Index for location-based queries
 VendorSchema.index({ city: 1 });
 VendorSchema.index({ state: 1 });

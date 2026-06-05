@@ -45,6 +45,19 @@ import {
   toggleVendorCouponActive,
   deleteVendorCoupon,
 } from '../../controllers/vendor-coupon.controller';
+import {
+  startStripeConnectOnboarding,
+  getStripeConnectStatus,
+  getStripeDashboardLink,
+  listVendorPayouts,
+} from '../../controllers/vendor-payout.controller';
+import {
+  listBlockTimes,
+  createBlockTime,
+  updateBlockTime,
+  deleteBlockTime,
+  getCustomerHistoryForVendor,
+} from '../../controllers/vendor-block-time.controller';
 import { protectVendor } from '../../middlewares/vendor-auth.middleware';
 import { AppError } from '../../utils/appError.util';
 
@@ -215,5 +228,29 @@ router.post(
 router.put('/coupons/:id', updateVendorCoupon);
 router.patch('/coupons/:id/toggle-active', toggleVendorCouponActive);
 router.delete('/coupons/:id', deleteVendorCoupon);
+
+// Stripe Connect (vendor onboarding for payouts)
+router.post(
+  '/stripe-connect/onboard',
+  [
+    body('returnUrl').notEmpty().withMessage('returnUrl is required'),
+    body('refreshUrl').notEmpty().withMessage('refreshUrl is required'),
+  ],
+  startStripeConnectOnboarding,
+);
+router.get('/stripe-connect/status', getStripeConnectStatus);
+router.get('/stripe-connect/dashboard-link', getStripeDashboardLink);
+
+// Payouts ledger
+router.get('/payouts', listVendorPayouts);
+
+// Block-time / vacation
+router.get('/block-times', listBlockTimes);
+router.post('/block-times', createBlockTime);
+router.put('/block-times/:id', updateBlockTime);
+router.delete('/block-times/:id', deleteBlockTime);
+
+// Customer history (vendor sees the customer's appointments with them)
+router.get('/customers/:customerId/history', getCustomerHistoryForVendor);
 
 export default router;

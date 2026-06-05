@@ -79,6 +79,77 @@ const UserSchema: Schema = new Schema(
       sparse: true,
       index: true,
     },
+    // ─── Phone & SMS consent (TCPA compliance) ───
+    phone: {
+      type: String,
+      trim: true,
+    },
+    smsConsent: {
+      type: Boolean,
+      default: false,
+    },
+    smsConsentAt: {
+      type: Date,
+      default: null,
+    },
+    smsConsentMethod: {
+      // How the user gave consent — for audit trail required by TCPA
+      type: String,
+      enum: ['signup_checkbox', 'profile_toggle', 'verbal', 'imported', null],
+      default: null,
+    },
+    marketingEmailConsent: {
+      type: Boolean,
+      default: false,
+    },
+    marketingEmailConsentAt: {
+      type: Date,
+      default: null,
+    },
+    // ─── Account deletion (CCPA / privacy) ───
+    // Soft-delete: when set, the user can no longer log in and PII is scrubbed
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletionRequestedAt: {
+      type: Date,
+      default: null,
+    },
+    // ─── Saved addresses (Address Book) ───
+    addresses: [
+      {
+        label: { type: String, trim: true }, // e.g. "Home", "Office"
+        address1: { type: String, trim: true, required: true },
+        address2: { type: String, trim: true },
+        city: { type: String, trim: true, required: true },
+        state: { type: String, trim: true, required: true },
+        zip: { type: String, trim: true, required: true },
+        country: { type: String, trim: true, default: 'US' },
+        // GeoJSON point for "current location" + "nearest vendor" features
+        location: {
+          type: { type: String, enum: ['Point'], default: 'Point' },
+          coordinates: { type: [Number], default: undefined },
+        },
+        isDefault: { type: Boolean, default: false },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
+    // ─── Notification preferences (per-type granular toggles) ───
+    notificationPrefs: {
+      // Push
+      pushBookingUpdates: { type: Boolean, default: true },
+      pushReminders: { type: Boolean, default: true },
+      pushPromotions: { type: Boolean, default: false },
+      // Email
+      emailBookingUpdates: { type: Boolean, default: true },
+      emailReminders: { type: Boolean, default: true },
+      emailPromotions: { type: Boolean, default: false },
+      // SMS — only sent if smsConsent === true (TCPA gate)
+      smsBookingUpdates: { type: Boolean, default: true },
+      smsReminders: { type: Boolean, default: true },
+      smsPromotions: { type: Boolean, default: false },
+    },
   },
   {
     // Match the exact field names and structure from the database
@@ -146,5 +217,7 @@ UserSchema.index({ expoPushToken: 1 }, { sparse: true });
 UserSchema.index({ activationToken: 1 }, { sparse: true });
 // Index for auth provider filtering
 UserSchema.index({ authProvider: 1 });
+// Sparse index for soft-deleted users (so login lookups can exclude them quickly)
+UserSchema.index({ deletedAt: 1 }, { sparse: true });
 
 export default mongoose.model<IUser>('User', UserSchema);
