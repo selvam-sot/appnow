@@ -5,43 +5,46 @@ import User from '../models/user.model';
 
 /**
  * Customer address book — saved service addresses for faster booking.
- * All routes assume `protect` middleware has set `req.user`.
+ * The customer app is Clerk-authenticated; we identify the user by their
+ * Clerk ID passed via `x-clerk-id` header (preferred) or `clerkId` in
+ * query/body. The legacy internal-JWT protect middleware is not used here
+ * because the customer client never carries that token.
  */
+
+const resolveUser = async (req: Request) => {
+  const clerkId =
+    (req.headers['x-clerk-id'] as string | undefined) ||
+    (req.query.clerkId as string | undefined) ||
+    (req.body && req.body.clerkId);
+  if (!clerkId) throw new AppError('Missing clerkId', 401);
+  const dbUser = await User.findOne({ clerkId });
+  if (!dbUser) throw new AppError('User not found', 404);
+  return dbUser;
+};
 
 /** GET /api/v1/customer/addresses */
 export const listAddresses = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
-
-  const dbUser = await User.findById(user._id).select('addresses').lean();
+  const dbUser = await resolveUser(req);
   res.status(200).json({
     success: true,
-    data: (dbUser as any)?.addresses || [],
+    data: (dbUser as any).addresses || [],
   });
 });
 
 /** POST /api/v1/customer/addresses */
 export const createAddress = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
-
+  const dbUser = await resolveUser(req);
   const { label, address1, address2, city, state, zip, country, location, isDefault } = req.body;
 
   if (!address1 || !city || !state || !zip) {
     throw new AppError('address1, city, state, and zip are required', 400);
   }
 
-  const dbUser = await User.findById(user._id);
-  if (!dbUser) throw new AppError('User not found', 404);
-
   const addresses: any[] = (dbUser as any).addresses || [];
 
-  // If incoming is default, unset any existing default
   if (isDefault) {
     addresses.forEach((a) => (a.isDefault = false));
   }
-
-  // If this is the first address, force default
   const shouldBeDefault = addresses.length === 0 || isDefault;
 
   const newAddress: any = {
@@ -71,18 +74,14 @@ export const createAddress = asyncHandler(async (req: Request, res: Response) =>
 
 /** PUT /api/v1/customer/addresses/:addressId */
 export const updateAddress = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
+  const dbUser = await resolveUser(req);
   const { addressId } = req.params;
-
-  const dbUser = await User.findById(user._id);
-  if (!dbUser) throw new AppError('User not found', 404);
 
   const addresses: any[] = (dbUser as any).addresses || [];
   const target = addresses.find((a) => a._id?.toString() === addressId);
   if (!target) throw new AppError('Address not found', 404);
 
-  const allowed = ['label', 'address1', 'address2', 'city', 'state', 'zip', 'country', 'location'];
+  const allowed = ['label', 'address1', 'address2', 'city', 'state', 'zip', 'country'];
   for (const key of allowed) {
     if (req.body[key] !== undefined) target[key] = req.body[key];
   }
@@ -100,18 +99,13 @@ export const updateAddress = asyncHandler(async (req: Request, res: Response) =>
 
 /** DELETE /api/v1/customer/addresses/:addressId */
 export const deleteAddress = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
+  const dbUser = await resolveUser(req);
   const { addressId } = req.params;
-
-  const dbUser = await User.findById(user._id);
-  if (!dbUser) throw new AppError('User not found', 404);
 
   const addresses: any[] = (dbUser as any).addresses || [];
   const wasDefault = addresses.find((a) => a._id?.toString() === addressId)?.isDefault;
   const filtered = addresses.filter((a) => a._id?.toString() !== addressId);
 
-  // If we deleted the default and others remain, promote the first one
   if (wasDefault && filtered.length > 0) {
     filtered[0].isDefault = true;
   }
@@ -124,12 +118,8 @@ export const deleteAddress = asyncHandler(async (req: Request, res: Response) =>
 
 /** PATCH /api/v1/customer/addresses/:addressId/default */
 export const setDefaultAddress = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
+  const dbUser = await resolveUser(req);
   const { addressId } = req.params;
-
-  const dbUser = await User.findById(user._id);
-  if (!dbUser) throw new AppError('User not found', 404);
 
   const addresses: any[] = (dbUser as any).addresses || [];
   const target = addresses.find((a) => a._id?.toString() === addressId);
@@ -144,11 +134,7 @@ export const setDefaultAddress = asyncHandler(async (req: Request, res: Response
 
 /** PUT /api/v1/customer/notification-prefs */
 export const updateNotificationPrefs = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
-
-  const dbUser = await User.findById(user._id);
-  if (!dbUser) throw new AppError('User not found', 404);
+  const dbUser = await resolveUser(req);
 
   const allowed = [
     'pushBookingUpdates',
@@ -176,10 +162,9 @@ export const updateNotificationPrefs = asyncHandler(async (req: Request, res: Re
 
 /** GET /api/v1/customer/notification-prefs */
 export const getNotificationPrefs = asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user;
-  if (!user) throw new AppError('Not authenticated', 401);
-
-  const dbUser = await User.findById(user._id).select('notificationPrefs smsConsent marketingEmailConsent').lean();
+  const dbUser = await User.findById((await resolveUser(req))._id)
+    .select('notificationPrefs smsConsent marketingEmailConsent')
+    .lean();
   res.status(200).json({
     success: true,
     data: {

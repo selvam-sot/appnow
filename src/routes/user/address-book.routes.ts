@@ -1,5 +1,4 @@
 import express from 'express';
-import { protect } from '../../middlewares/auth.middleware';
 import {
   listAddresses,
   createAddress,
@@ -12,8 +11,9 @@ import {
 
 const router = express.Router();
 
-// All routes require auth
-router.use(protect);
+// Auth: customer app is Clerk-authenticated. The controllers identify the
+// user by clerkId (x-clerk-id header / query / body) rather than the
+// internal-JWT `protect` middleware, which the customer client doesn't carry.
 
 // Address book
 router.get('/addresses', listAddresses);
