@@ -12,6 +12,7 @@ import {
   getPaymentHistory,
   getSavedPaymentMethods,
   deleteSavedPaymentMethod,
+  createSetupIntent,
 } from '../../controllers/payment.controller';
 import { paymentLimiter } from '../../middlewares/rateLimiter.middleware';
 
@@ -107,5 +108,8 @@ router.get('/history', getPaymentHistory);
 // Saved payment methods
 router.get('/saved-methods/:clerkId', paymentLimiter, getSavedPaymentMethods);
 router.delete('/saved-methods/:paymentMethodId', paymentLimiter, deleteSavedPaymentMethod);
+
+// SetupIntent — lets the customer save a card for off-session future payments
+router.post('/setup-intent', paymentLimiter, createSetupIntent);
 
 export default router;

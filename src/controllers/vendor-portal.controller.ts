@@ -12,6 +12,8 @@ import Category from '../models/category.model';
 import SubCategory from '../models/sub-category.model';
 import Service from '../models/service.model';
 import { getVendorServiceIds } from '../utils/vendor.util';
+import StripeService from '../services/stripe.service';
+import logger from '../config/logger';
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY! });
 
@@ -422,16 +424,54 @@ export const declineAppointment = asyncHandler(async (req: Request, res: Respons
     throw new AppError('Only pending appointments can be declined', 400);
   }
 
+  // Vendor-initiated decline → always full refund (customer has no fault here).
+  // Only refund if customer paid via Stripe and payment completed.
+  let refundResult: {
+    refundId: string;
+    refundStatus: string;
+    refundAmount: number;
+  } | null = null;
+
+  if (
+    appointment.paymentIntentId &&
+    appointment.paymentStatus === 'completed'
+  ) {
+    try {
+      const refund = await StripeService.refundPayment(appointment.paymentIntentId);
+      refundResult = {
+        refundId: refund.id,
+        refundStatus: refund.status || 'pending',
+        refundAmount: refund.amount ? refund.amount / 100 : appointment.total,
+      };
+      appointment.refundId = refund.id;
+      appointment.refundStatus =
+        (refund.status as 'pending' | 'processing' | 'succeeded' | 'failed' | 'cancelled') ||
+        'pending';
+      appointment.refundAmount = refundResult.refundAmount;
+      appointment.paymentStatus = 'refunded';
+      logger.info(
+        `Vendor declined appointment ${id} — full refund $${refundResult.refundAmount.toFixed(2)} issued (refund ${refund.id})`,
+      );
+    } catch (refundError: any) {
+      // Refund failure must not block the decline itself — log and continue.
+      // Operations can manually issue the refund from the Stripe dashboard.
+      logger.error(
+        `Refund failed for vendor-declined appointment ${id}: ${refundError.message}`,
+      );
+    }
+  }
+
   appointment.status = 'cancelled';
   appointment.cancellationReason = reason || 'Declined by vendor';
   appointment.cancelledAt = new Date();
   await appointment.save();
 
-  // TODO: Initiate refund if payment was completed
-
   res.status(200).json({
     success: true,
-    message: 'Appointment declined successfully',
+    message: refundResult
+      ? `Appointment declined and full refund of $${refundResult.refundAmount.toFixed(2)} issued`
+      : 'Appointment declined successfully',
+    refund: refundResult,
   });
 });
 

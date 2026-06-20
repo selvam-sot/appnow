@@ -521,6 +521,51 @@ export const getSavedPaymentMethods = async (req: Request, res: Response): Promi
   }
 };
 
+/**
+ * Create a Stripe SetupIntent so the customer can save a card without
+ * making a payment. The client takes the returned client_secret and
+ * confirms via the Stripe Payment Sheet (or initSetupIntent on RN).
+ *
+ * Lazily creates a Stripe customer if the user doesn't have one yet.
+ */
+export const createSetupIntent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { clerkId } = req.body;
+    if (!clerkId) {
+      res.status(400).json({ success: false, message: 'clerkId is required' });
+      return;
+    }
+
+    const user = await User.findOne({ clerkId });
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    // Lazy-create the Stripe customer on first save attempt.
+    if (!user.stripeCustomerId) {
+      const customer = await StripeService.createCustomer({
+        email: user.email,
+        name: user.name || undefined,
+        metadata: { clerkId: user.clerkId || '' },
+      });
+      user.stripeCustomerId = customer.id;
+      await user.save();
+    }
+
+    const setupIntent = await StripeService.createSetupIntent(user.stripeCustomerId);
+    res.status(200).json({
+      success: true,
+      data: {
+        setupIntentClientSecret: setupIntent.client_secret,
+        customerId: user.stripeCustomerId,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const deleteSavedPaymentMethod = async (req: Request, res: Response): Promise<void> => {
   try {
     const { paymentMethodId } = req.params;

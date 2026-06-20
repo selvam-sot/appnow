@@ -189,6 +189,19 @@ export class StripeService {
     return paymentMethods.data;
   }
 
+  /**
+   * Create a SetupIntent for off-session future payments. Returns the
+   * client_secret the mobile SDK needs to confirm the SetupIntent and
+   * attach the resulting PaymentMethod to the customer.
+   */
+  static async createSetupIntent(customerId: string): Promise<Stripe.SetupIntent> {
+    return stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      usage: 'off_session',
+    });
+  }
+
   static async attachPaymentMethod(customerId: string, paymentMethodId: string) {
     const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
       customer: customerId,
