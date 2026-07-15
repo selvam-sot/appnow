@@ -64,6 +64,15 @@ const UserSchema: Schema = new Schema(
       enum: ['customer', 'admin', 'vendor'],
       default: 'customer', // Changed from 'user' to 'customer' to match your enum
     },
+    // Admin sub-role hierarchy (only relevant when role === 'admin').
+    // super_admin: full access including destructive/financial actions.
+    // support_agent: read + safe support actions (impersonation with reason,
+    //                wallet credit up to a per-day cap enforced by policy).
+    adminRole: {
+      type: String,
+      enum: ['super_admin', 'support_agent', null],
+      default: null,
+    },
     tokenVersion: {
       type: Number,
       default: 0,
@@ -105,6 +114,13 @@ const UserSchema: Schema = new Schema(
     marketingEmailConsentAt: {
       type: Date,
       default: null,
+    },
+    // ─── Wallet balance (store credit) ───
+    // Running total in dollars. Sourced from WalletTransaction ledger.
+    walletBalance: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     // ─── Account deletion (CCPA / privacy) ───
     // Soft-delete: when set, the user can no longer log in and PII is scrubbed

@@ -27,6 +27,7 @@ import referralRoutes from './referral.routes';
 import waitlistRoutes from './waitlist.routes';
 import searchLogRoutes from './search-log.routes';
 import scheduledNotificationRoutes from './scheduled-notification.routes';
+import adminFinancialRoutes from './admin-financial.routes';
 import { syncAdmin, getAdminProfile } from '../../controllers/admin-portal.controller';
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import { AppError } from '../../utils/appError.util';
@@ -133,5 +134,6 @@ router.use('/referrals', referralRoutes);
 router.use('/waitlist', waitlistRoutes);
 router.use('/search-logs', searchLogRoutes);
 router.use('/scheduled-notifications', scheduledNotificationRoutes);
+router.use('/', adminFinancialRoutes); // /appointments/:id/refund, /users/:id/wallet-credit, /users/:id/wallet-history
 
 export default router;

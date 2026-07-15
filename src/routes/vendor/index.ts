@@ -253,4 +253,39 @@ router.delete('/block-times/:id', deleteBlockTime);
 // Customer history (vendor sees the customer's appointments with them)
 router.get('/customers/:customerId/history', getCustomerHistoryForVendor);
 
+// Business documents (license, insurance, W-9) — separate from Stripe KYC.
+// Vendor uploads a URL after client-side upload to storage; admin reviews.
+import {
+  uploadVendorDocument,
+  listVendorDocuments,
+  removeVendorDocument,
+} from '../../controllers/vendor-documents.controller';
+router.get('/documents', listVendorDocuments);
+router.post('/documents', uploadVendorDocument);
+router.delete('/documents/:docId', removeVendorDocument);
+
+// Staff management (multi-specialist / multi-tech vendors)
+import {
+  listVendorStaff,
+  createVendorStaff,
+  updateVendorStaff,
+  deleteVendorStaff,
+  toggleVendorStaff,
+} from '../../controllers/staff.controller';
+router.get('/staff', listVendorStaff);
+router.post('/staff', createVendorStaff);
+router.put('/staff/:id', updateVendorStaff);
+router.delete('/staff/:id', deleteVendorStaff);
+router.patch('/staff/:id/toggle', toggleVendorStaff);
+
+// Chat / messaging with customers
+import {
+  listVendorConversations,
+  listVendorMessages,
+  sendVendorMessage,
+} from '../../controllers/chat.controller';
+router.get('/conversations', listVendorConversations);
+router.get('/conversations/:id/messages', listVendorMessages);
+router.post('/conversations/:id/messages', sendVendorMessage);
+
 export default router;

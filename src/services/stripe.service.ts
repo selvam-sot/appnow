@@ -77,6 +77,24 @@ export class StripeService {
     return paymentIntent;
   }
 
+  static async retrievePaymentIntent(
+    paymentIntentId: string,
+  ): Promise<Stripe.PaymentIntent> {
+    return stripe.paymentIntents.retrieve(paymentIntentId);
+  }
+
+  /**
+   * Update a PaymentIntent before confirmation (e.g. to reduce the amount
+   * after applying wallet credit). Only works while intent is in
+   * `requires_payment_method` or `requires_confirmation` state.
+   */
+  static async updatePaymentIntent(
+    paymentIntentId: string,
+    params: { amount?: number; metadata?: Record<string, string> },
+  ): Promise<Stripe.PaymentIntent> {
+    return stripe.paymentIntents.update(paymentIntentId, params);
+  }
+
   static async refundPayment(paymentIntentId: string, amount?: number): Promise<Stripe.Refund> {
     try {
       const refund = await stripe.refunds.create({

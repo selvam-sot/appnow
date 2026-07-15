@@ -5,6 +5,7 @@ import {
   getVendorServiceList,
   searchVendorServices,
 } from './../../controllers/vendor-service.controller';
+import { listStaffForVendorService } from '../../controllers/staff.controller';
 import { cacheVendorServices } from '../../middlewares/cache.middleware';
 
 const router = express.Router();
@@ -85,6 +86,8 @@ const router = express.Router();
 router.get('/search', cacheVendorServices, searchVendorServices);
 
 router.get('/:id', cacheVendorServices, getVendorServiceById);
+// Public staff picker — active staff who can deliver this service
+router.get('/:id/staff', listStaffForVendorService);
 router.post('/', getVendorServiceList);
 
 export default router;

@@ -24,6 +24,8 @@ import waitlistRoutes from './waitlist.routes';
 import privacyRoutes from './privacy.routes';
 import addressBookRoutes from './address-book.routes';
 import geoSearchRoutes from './geo-search.routes';
+import walletRoutes from './wallet.routes';
+import chatRoutes from './chat.routes';
 
 const router = Router();
 
@@ -50,6 +52,8 @@ router.use('/referrals', referralRoutes);
 router.use('/waitlist', waitlistRoutes);
 router.use('/privacy', privacyRoutes);
 router.use('/', addressBookRoutes); // /addresses, /notification-prefs
+router.use('/', walletRoutes); // /wallet, /wallet/apply-to-payment
+router.use('/', chatRoutes); // /conversations, /conversations/:id/messages
 router.use('/search', geoSearchRoutes); // /search/near-me
 
 export default router;

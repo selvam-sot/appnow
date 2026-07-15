@@ -5,6 +5,11 @@ import {
   generateUserReport,
   generateAppointmentReport,
 } from '../../controllers/reports.controller';
+import {
+  salesTaxByState,
+  nineteen99Report,
+  revenueLedgerCsv,
+} from '../../controllers/admin-tax-reports.controller';
 
 const router = express.Router();
 
@@ -103,5 +108,14 @@ router.get('/users', generateUserReport);
  *         description: Appointment report data
  */
 router.get('/appointments', generateAppointmentReport);
+
+// Sales tax by state — for state remittance filings. Supports `?format=csv`.
+router.get('/sales-tax-by-state', salesTaxByState);
+
+// 1099-NEC vendor earnings for a calendar year. Supports `?format=csv`.
+router.get('/1099/:year', nineteen99Report);
+
+// Line-item revenue ledger CSV — complements the aggregate JSON report.
+router.get('/revenue.csv', revenueLedgerCsv);
 
 export default router;

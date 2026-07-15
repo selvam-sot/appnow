@@ -188,20 +188,33 @@ export const appointmentOperations = asyncHandler(async (req: Request, res: Resp
       }
     }
 
-    // Check if slot is already booked
+    // Check if slot is already booked.
+    // For multi-staff vendors: a slot is "taken" only for the specific staff
+    // member who has it. Different staff can hold the same time slot.
     if (
       req.body.vendorServiceId &&
       req.body.appointmentDate &&
       req.body.startTime &&
       req.body.endTime
     ) {
-      const existingAppointment = await Appointment.findOne({
+      const collisionQuery: any = {
         vendorServiceId: new mongoose.Types.ObjectId(req.body.vendorServiceId),
         appointmentDate: new Date(req.body.appointmentDate),
         startTime: req.body.startTime,
         endTime: req.body.endTime,
         status: { $nin: ['cancelled', 'rejected'] },
-      });
+      };
+      // If the incoming booking targets a specific staff member, only
+      // collide with existing bookings for that same staff (or "no preference").
+      // If no staff selected, we still collide with any booking on this slot.
+      if (req.body.staffId) {
+        collisionQuery.$or = [
+          { staffId: new mongoose.Types.ObjectId(req.body.staffId) },
+          { staffId: null },
+        ];
+      }
+
+      const existingAppointment = await Appointment.findOne(collisionQuery);
 
       if (existingAppointment) {
         return res.status(409).json({

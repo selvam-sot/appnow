@@ -23,6 +23,7 @@ import vendorRoutes from './routes/vendor';
 import { startNotificationScheduler } from './services/notification-scheduler.service';
 import { autoCompleteAppointments } from './services/scheduler.service';
 import { startWebhookWorker } from './services/webhook-queue.service';
+import { startEmailWorker } from './services/email-queue.service';
 import { shutdownQueues } from './config/queue';
 
 const app = express();
@@ -90,8 +91,9 @@ startNotificationScheduler();
 autoCompleteAppointments();
 setInterval(autoCompleteAppointments, 15 * 60 * 1000);
 
-// Background queue worker (Redis-backed). No-op if REDIS_URL not set.
+// Background queue workers (Redis-backed). No-op if REDIS_URL not set.
 startWebhookWorker();
+startEmailWorker();
 
 // Graceful shutdown — flush queues before process exits
 const shutdown = async (signal: string) => {

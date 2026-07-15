@@ -123,13 +123,40 @@ const VendorSchema: Schema = new Schema(
       type: Schema.Types.ObjectId,
       ref: 'User',
     },
-    // Business documents
+    // Business documents (KYC beyond Stripe Connect — license + insurance)
     businessLicense: {
       type: String,
     },
     taxId: {
       type: String,
     },
+    // Uploaded compliance documents. Client uploads to storage separately
+    // and posts the URL + type here; admin reviews and sets status.
+    businessDocuments: [
+      {
+        docType: {
+          type: String,
+          enum: [
+            'business_license',
+            'insurance_certificate',
+            'w9_form',
+            'professional_license',
+            'other',
+          ],
+          required: true,
+        },
+        url: { type: String, required: true },
+        status: {
+          type: String,
+          enum: ['pending_review', 'approved', 'rejected'],
+          default: 'pending_review',
+        },
+        reviewNotes: { type: String },
+        reviewedAt: { type: Date },
+        reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
     // ─── Stripe Connect (for vendor payouts) ───
     // Stripe Connect account ID (acct_xxx) — issued when vendor starts onboarding
     stripeConnectAccountId: {

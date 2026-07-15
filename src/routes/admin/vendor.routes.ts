@@ -10,6 +10,10 @@ import {
   verifyVendor,
   getVerificationStats,
 } from '../../controllers/vendor.controller';
+import {
+  adminListVendorDocuments,
+  adminReviewVendorDocument,
+} from '../../controllers/vendor-documents.controller';
 
 const router = express.Router();
 
@@ -20,6 +24,10 @@ router.use(protectAdmin);
 router.get('/verification/list', getVendorsByVerificationStatus);
 router.get('/verification/stats', getVerificationStats);
 router.put('/verification/:id', verifyVendor);
+
+// Business documents review (license, insurance, W-9)
+router.get('/:id/documents', adminListVendorDocuments);
+router.patch('/:id/documents/:docId', adminReviewVendorDocument);
 
 // Standard CRUD routes
 router.post('/', createVendor);

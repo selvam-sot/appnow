@@ -22,6 +22,10 @@ import {
 import { protectAdmin } from '../../middlewares/admin-auth.middleware';
 import { userValidationRules } from '../../utils/validation.util';
 import { authLimiter, registrationLimiter } from '../../middlewares/rateLimiter.middleware';
+import {
+  startImpersonation,
+  endImpersonation,
+} from '../../controllers/admin-impersonation.controller';
 
 const router = express.Router();
 
@@ -38,6 +42,11 @@ router.put('/profile', protectAdmin, userValidationRules.update(), updateUserPro
 // Admin-only routes
 router.delete('/account', protectAdmin, deleteUserAccount);
 router.get('/', protectAdmin, getUsers);
+
+// Impersonation — support agents can view what a customer/vendor sees.
+// Every start/end + every action taken is audit-logged.
+router.post('/impersonate/end', protectAdmin, endImpersonation);
+router.post('/:targetId/impersonate/start', protectAdmin, startImpersonation);
 
 /**
  * @swagger

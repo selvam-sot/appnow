@@ -49,6 +49,33 @@ const AppointmentSchema: Schema = new Schema(
       ref: 'VendorService',
       required: true,
     },
+    // Optional — if the vendor uses multi-staff, points to the specific
+    // Staff who will deliver the service. Solo vendors leave this null.
+    staffId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Staff',
+      default: null,
+      index: true,
+    },
+    // Recurring series linkage. When a customer books "every Tuesday for 8
+    // weeks", each occurrence is its own Appointment (payments + cancels
+    // remain per-instance) but they share a `recurrenceSeriesId`. The first
+    // occurrence sets `recurrencePattern` on itself for reference.
+    recurrenceSeriesId: {
+      type: Schema.Types.ObjectId,
+      default: null,
+      index: true,
+    },
+    recurrencePattern: {
+      type: {
+        frequency: {
+          type: String,
+          enum: ['weekly', 'biweekly', 'monthly'],
+        },
+        occurrences: { type: Number, min: 2, max: 52 },
+      },
+      default: null,
+    },
     servicePlace: {
       type: String,
       required: true,
