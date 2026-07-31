@@ -26,7 +26,7 @@ const resolveCustomerId = async (req: Request): Promise<mongoose.Types.ObjectId>
   if (!clerkId) throw new AppError('Missing clerkId', 401);
   const user = await User.findOne({ clerkId }).select('_id role');
   if (!user) throw new AppError('User not found', 404);
-  return user._id as mongoose.Types.ObjectId;
+  return user._id as unknown as mongoose.Types.ObjectId;
 };
 
 // ============================================================================

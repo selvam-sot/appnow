@@ -47,7 +47,7 @@ export function getQueue(name: string): Queue | null {
   if (!conn) return null;
 
   const queue = new Queue(name, {
-    connection: conn,
+    connection: conn as any,
     defaultJobOptions: {
       attempts: 5,
       backoff: { type: 'exponential', delay: 5000 },
@@ -71,7 +71,7 @@ export function registerWorker<T = any>(
   const conn = getConnection();
   if (!conn) return null;
 
-  const worker = new Worker<T>(name, processor, { connection: conn, concurrency });
+  const worker = new Worker<T>(name, processor, { connection: conn as any, concurrency });
   worker.on('completed', (job) => {
     logger.info(`[Queue:${name}] Job ${job.id} completed`);
   });
@@ -121,5 +121,5 @@ export async function shutdownQueues(): Promise<void> {
 export function getQueueEvents(name: string): QueueEvents | null {
   const conn = getConnection();
   if (!conn) return null;
-  return new QueueEvents(name, { connection: conn });
+  return new QueueEvents(name, { connection: conn as any });
 }

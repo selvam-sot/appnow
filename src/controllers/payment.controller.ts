@@ -544,10 +544,12 @@ export const createSetupIntent = async (req: Request, res: Response): Promise<vo
 
     // Lazy-create the Stripe customer on first save attempt.
     if (!user.stripeCustomerId) {
+      const fullName =
+        `${(user as any).firstName || ''} ${(user as any).lastName || ''}`.trim() ||
+        user.email;
       const customer = await StripeService.createCustomer({
         email: user.email,
-        name: user.name || undefined,
-        metadata: { clerkId: user.clerkId || '' },
+        name: fullName,
       });
       user.stripeCustomerId = customer.id;
       await user.save();
